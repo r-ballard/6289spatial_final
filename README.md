@@ -8,8 +8,6 @@ Open Pull Request
 
 Merge to shared dev
 
-git checkout dev
-
 Merge to main
 
 TODO: work
