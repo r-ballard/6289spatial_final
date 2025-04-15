@@ -30,10 +30,12 @@ remotes::install_github("mikejohnson51/AOI")
 
 
 library(ezids)
-pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA")
+pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI")
 
 invisible(lapply(pkg_vector,loadPkg))
 
 
 ```
+
+
 
