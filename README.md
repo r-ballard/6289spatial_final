@@ -11,3 +11,6 @@ Merge to shared dev
 Merge to main
 
 TODO: work
+
+
+request NOAA v2 API token from: https://www.ncdc.noaa.gov/cdo-web/token
