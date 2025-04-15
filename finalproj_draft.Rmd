@@ -1,0 +1,39 @@
+---
+title: "6289_final_3"
+author: "rballard myork [uname]"
+date: "2025-04-15"
+output: html_document
+---
+
+
+# PROJECT NAME
+
+## Frontmatter
+```{r ezidsetup}
+#https://github.com/physicsland/ezids
+if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
+install.packages ("devtools")
+devtools::install_github("physicsland/ezids")
+```
+The above installs ezids, a package manager developed and maintained by GW DS Department.
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+set.seed(20052)
+
+remotes::install_github("mikejohnson51/NFHL")
+remotes::install_github("mikejohnson51/AOI")
+
+
+
+library(ezids)
+pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA")
+
+invisible(lapply(pkg_vector,loadPkg))
+
+
+```
+
