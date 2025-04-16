@@ -1,0 +1,31 @@
+NOAA
+ 1. https://www.ncdc.noaa.gov/stormevents/choosedates.jsp?statefips=11%2CDISTRICT+OF+COLUMBIA
+Storm Events Database
+For DC Data available from 01/1996 to 12/2024. Storm Data are geographically categorized by regions in a few cases, but mostly it is just DC.
+ 
+ 
+ 
+2. NOAA Flash Flood Warnings
+Part of USA Short-Term Weather Warnings
+https://inside.nssl.noaa.gov/flash/
+Flash Flood warning data, need to check availability for DC region
+https://atlas.eia.gov/datasets/esri2::usa-short-term-weather-warnings/about?layer=2
+may be 1990-current, spatial units : point or polygon
+ 
+3. Global Flood Database, also known as 
+Dartmouth Flood Observatory catalogue
+
+https://floodobservatory.colorado.edu/Archives/
+
+https://developers.google.com/earth-engine/datasets/catalog/GLOBAL_FLOOD_DB_MODIS_EVENTS_V1
+
+ 
+4. Flood measures by zipcode
+https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/KRZS4M
+- flood measures using raster maps from the Global Flood Database, aggregated to zipcode for the years 2000-2018. Specific measures are percent of zip code area flooded and the mean and maximum duration of flooding in flooded pixels within the zip code. Flood identifier, start date, main cause, and severity are also included per the Dartmouth Flood Observatory catalogue.
+ 
+5. USGS STN Flood Event Data
+https://stn.wim.usgs.gov/STNDataPortal/
+ 
+ 
+ Pretty useless for DC mentioned two hurricanes: 2003 Isabel
