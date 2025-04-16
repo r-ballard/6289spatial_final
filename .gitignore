@@ -49,4 +49,4 @@ po/*~
 rsconnect/
 
 # Data Directory
-data/
+data/*
