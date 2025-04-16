@@ -1,0 +1,91 @@
+---
+title: "6289_final_3"
+author: "rballard"
+date: "2025-04-15"
+output: html_document
+---
+
+
+# PROJECT NAME
+
+## Frontmatter
+```{r ezidsetup}
+#https://github.com/physicsland/ezids
+if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
+install.packages ("devtools")
+devtools::install_github("physicsland/ezids")
+```
+The above installs ezids, a package manager developed and maintained by GW DS Department.
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+set.seed(20052)
+
+remotes::install_github("mikejohnson51/NFHL")
+remotes::install_github("mikejohnson51/AOI")
+
+
+
+library(ezids)
+pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI")
+
+invisible(lapply(pkg_vector,loadPkg))
+
+
+```
+
+
+```{r loaddata}
+
+nfhl_describe(28)
+
+dc_aoi <- AOI::aoi_get("Washington, DC") |> 
+  AOI::aoi_buffer(dist = 10, unit = "km")
+
+dc_aoi <- AOI::aoi_get("Washington, DC", wh = 10, units = "km", bbox = TRUE) |>
+    st_as_sf()
+
+md_aoi <- AOI::aoi_ext("MD", wh = 10, units = "km", bbox = TRUE) |>
+    st_as_sf()
+
+va_aoi <- AOI::aoi_ext("VA", wh = 10, units = "km", bbox = TRUE) |>
+    st_as_sf()
+
+mdva_aoi<- AOI::aoi_ext(state = c("VA", "MD"))
+mdva_floodzone <- nfhl_get(dc_aoi, 28) %>%
+                  filter(SFHA_TF == "T")
+
+
+dc_floodzone <- nfhl_get(dc_aoi, 28) %>%
+    filter(SFHA_TF == "T")
+md_floodzone <- nfhl_get(md_aoi, 28)
+va_floodzone <- nfhl_get(va_aoi, 28)
+
+
+
+```
+
+
+```{r samplecode}
+
+#sample code
+AOI <- AOI::aoi_ext("UCSB", wh = 10, units = "km", bbox = TRUE) |>
+    st_as_sf()
+
+# View at Layer ID 28 description
+nfhl_describe(28)$Description
+#> [1] "The S_Fld_Haz_Ar table contains information about the flood hazards within the flood risk project area. These zones are used by FEMA to designate the SFHA and for insurance rating purposes.  These data are the regulatory flood zones designated by FEMA."
+
+# Extract Flood Hazard Polygons and filter by Special Flood
+# Hazard Areas (SFHA)
+floodhazard <- nfhl_get(AOI, 28) %>%
+    filter(SFHA_TF == "T")
+
+
+```
+
+
+
