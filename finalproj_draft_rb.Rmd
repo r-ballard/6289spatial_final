@@ -27,13 +27,14 @@ set.seed(20052)
 remotes::install_github("mikejohnson51/NFHL")
 remotes::install_github("mikejohnson51/AOI")
 
-
+install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
 library(ezids)
-pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI")
+pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI", "tidycensus", "tigris","rfema")
 
 invisible(lapply(pkg_vector,loadPkg))
 
+install.packages("rfema")
 
 ```
 
