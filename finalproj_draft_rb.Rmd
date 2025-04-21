@@ -30,14 +30,184 @@ remotes::install_github("mikejohnson51/AOI")
 install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
 library(ezids)
-pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI", "tidycensus", "tigris","rfema")
+pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI", "tidycensus", "tigris","rfema","raster","stringr","xml2","rvest","httr","reader","purrr","readr")
 
 invisible(lapply(pkg_vector,loadPkg))
 
-install.packages("rfema")
+```
+
+
+```{r noaa_bulkdatadownload, eval=FALSE}
+#This code chunk will download all the NOAA event data so don't run if data is already present in environment.
+
+# Base URL of the directory
+base_url <- "https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/"
+
+# Read the HTML content of the directory listing
+page <- read_html(base_url)
+
+# Extract all links to .csv.gz files
+file_links <- page %>%
+  html_nodes("a") %>%
+  html_attr("href") %>%
+  na.omit() %>%
+  str_subset("\\.csv\\.gz$")
+
+# Make full URLs
+full_urls <- paste0(base_url, file_links)
+
+# Download folder (you can change this)
+download_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test"
+dir.create(download_dir, showWarnings = FALSE)
+
+# Loop to download with delays
+for (url in full_urls) {
+  file_name <- basename(url)
+  dest_path <- file.path(download_dir, file_name)
+  
+  message("Downloading: ", file_name)
+  tryCatch({
+    download.file(url, destfile = dest_path, mode = "wb")
+  }, error = function(e) {
+    warning("Failed to download ", file_name, ": ", conditionMessage(e))
+  })
+  
+  # Wait a few seconds to avoid hammering the server
+  Sys.sleep(runif(1, 2, 5))  # random wait between 2 and 5 seconds
+}
 
 ```
 
+```{r noaa_rowjoin}
+#rowwise joins of event details, fatalities, and locations
+
+data_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test"
+files <- list.files(data_dir, pattern = "\\.csv\\.gz$", full.names = TRUE)
+
+details_files <- files[grepl("StormEvents_details", files)]
+locations_files <- files[grepl("StormEvents_locations", files)]
+fatalities_files <- files[grepl("StormEvents_fatalities", files)]
+
+read_as_character <- function(file) {
+  df <- read_csv(file, col_types = cols(.default = col_character()), show_col_types = FALSE)
+  df$filename <- basename(file)
+  df
+}
+
+# Combine all details files
+storm_details_df <- map_dfr(details_files, read_as_character)
+
+# Combine all locations files
+storm_locations_df <- map_dfr(locations_files, read_as_character)
+
+# Combine all fatalities files
+storm_fatalities_df <- map_dfr(fatalities_files, read_as_character)
+
+head(storm_details_df)
+
+```
+
+```{r noaa_detailsfilter}
+#filters event details to include only DC, MD, VA state fips codes
+storm_details_dmv <- storm_details_df %>%
+  filter(STATE_FIPS %in% c("11", #DC
+                           "24", #MD
+                           "51"  #VA
+                           )) 
+```
+
+```{r noaa_tablewrite}
+#writes processed table
+
+data_dir = "C:/Users/russe/Documents/github/6289spatial_final/data"
+
+write_pipe_csv_gz <- function(df, output_dir, filename) {
+  # Ensure the output directory exists
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  # Construct full path
+  file_path <- file.path(output_dir, paste0(filename, ".csv.gz"))
+  
+  # Write the compressed, pipe-delimited file
+  readr::write_delim(
+    df,
+    file = file_path,
+    delim = "|",
+    col_names = TRUE
+  )
+  
+  message("File written to: ", file_path)
+}
+
+
+write_pipe_csv_gz(storm_details_dmv, data_dir, "storm_details_dmv")
+```
+
+```{r noaa_tableload}
+#will read the filtered storm_details_dmv.csv.gz saved to your repo data directory from GDrive
+
+data_dir = "C:/Users/russe/Documents/github/6289spatial_final/data"
+
+read_pipe_csv_gz <- function(input_dir, filename) {
+  file_path <- file.path(input_dir, paste0(filename, ".csv.gz"))
+  
+  df <- readr::read_delim(
+    file = file_path,
+    delim = "|",
+    col_names = TRUE,
+    show_col_types = FALSE
+  )
+  
+  return(df)
+}
+
+storm_details_dmv_reloaded <- read_pipe_csv_gz(data_dir, "storm_details_dmv")
+
+```
+
+```{r noaa_tablejoin}
+#Joining these tables introduces cartesian joins into the data this should be approached with caution and intentionality.
+
+# Start by joining details and locations (left join to keep all details)
+details_locations <- left_join(
+  storm_details_df,
+  storm_locations_df,
+  by = "EVENT_ID",
+  suffix = c("_details", "_locations")
+)
+
+is_unique <- n_distinct(details_locations$EVENT_ID) == nrow(details_locations)
+
+# Then join with fatalities
+full_storm_df <- left_join(
+  details_locations,
+  storm_fatalities_df,
+  by = "EVENT_ID",
+  suffix = c("", "_fatalities")
+)
+
+# Join with nested fatalities
+details_with_nested_fatalities <- left_join(details_locations, fatalities_nested, by = "EVENT_ID")
+
+# Join fatalities to locations
+fatalities_locations <- left_join(
+  storm_fatalities_df,
+  storm_locations_df,
+  by = "EVENT_ID",
+  suffix = c("_fatalities", "_locations")
+)
+
+full_storm_df <- left_join(
+  storm_details_df,
+  fatalities_locations,
+  by = "EVENT_ID",
+  suffix = c("_details", "_locations_fatalities")
+)
+```
+
+
+
+---old---
 
 ```{r loaddata}
 
@@ -90,3 +260,23 @@ floodhazard <- nfhl_get(AOI, 28) %>%
 
 
 
+
+```{r testncload}
+library("raster")
+r = raster("C:\\Users\\russe\\Downloads\\gpcp_v01r03_daily_d20101231_c20170530.nc")
+
+```
+
+```{r testnoaaload}
+df <- read.table("C:\\Users\\russe\\Downloads\\DC_Features_20140204.txt", 
+                 header = TRUE, 
+                 sep = "|",
+                 quote="",
+                 stringsAsFactors = FALSE)
+```
+
+
+
+```{r}
+head(df)
+```
