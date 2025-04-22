@@ -270,6 +270,14 @@ cz_events_per_decade <- storm_details_dmv_reloaded %>%
   group_by(DECADE, CZ_FIPS, STATE_FIPS) %>%
   summarise(total_events = n(), .groups = "drop")
 
+
+theme_landscape <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "bottom"
+  )
+
 ggplot(cz_events_per_decade, aes(x = DECADE, y = total_events)) +
   geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
   labs(
@@ -277,7 +285,8 @@ ggplot(cz_events_per_decade, aes(x = DECADE, y = total_events)) +
     x = "Decade",
     y = "Total Events per CZ_FIPS"
   ) +
-  theme_minimal() +
+  #theme_minimal() +
+  theme_landscape +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     text = element_text(size = 12)
