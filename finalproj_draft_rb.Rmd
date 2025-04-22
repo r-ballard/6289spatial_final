@@ -165,6 +165,126 @@ storm_details_dmv_reloaded <- read_pipe_csv_gz(data_dir, "storm_details_dmv")
 
 ```
 
+
+
+### Annual Total Events By Event By Year By FIPS
+```{r annualevents}
+library(dplyr)
+library(tidyr)
+
+# 1. Extract YEAR and filter for DMV
+storm_summary <- storm_details_df %>%
+  filter(STATE_FIPS %in% c("11", "24", "51")) %>%
+  mutate(
+    YEAR = substr(BEGIN_YEARMONTH, 1, 4)
+  ) %>%
+  group_by(STATE, YEAR, EVENT_TYPE) %>%
+  summarise(total_events = n(), .groups = "drop")
+
+# 2. Pivot wider: one row per (STATE, YEAR), columns for each EVENT_TYPE
+storm_pivot <- storm_summary %>%
+  pivot_wider(
+    names_from = EVENT_TYPE,
+    values_from = total_events,
+    values_fill = 0
+  )
+
+```
+
+
+```{r}
+library(tidyr)
+library(dplyr)
+
+storm_long <- storm_pivot %>%
+  pivot_longer(
+    cols = -c(STATE, YEAR),
+    names_to = "EVENT_TYPE",
+    values_to = "TOTAL_EVENTS"
+  ) %>%
+  mutate(YEAR = as.integer(YEAR))
+
+library(ggplot2)
+
+ggplot(storm_long, aes(x = YEAR, y = TOTAL_EVENTS, color = EVENT_TYPE)) +
+  geom_line(size = 1) +
+  facet_wrap(~ STATE) +
+  labs(
+    title = "Storm Events Over Time by Type",
+    x = "Year",
+    y = "Number of Events",
+    color = "Event Type"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    legend.position = "bottom"
+  )
+
+
+```
+```{r statecountypivot}
+
+library(dplyr)
+
+cz_unique_count <- storm_details_dmv_reloaded %>%
+  group_by(STATE_FIPS) %>%
+  summarise(unique_cz_fips = n_distinct(CZ_FIPS), .groups = "drop")
+
+cz_unique_count
+```
+
+
+```{r cz_fipseventboxplotbyyear}
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Extract year and count events per CZ_FIPS per year
+cz_events_per_year <- storm_details_dmv_reloaded %>%
+  mutate(YEAR = substr(BEGIN_YEARMONTH, 1, 4)) %>%
+  group_by(YEAR, CZ_FIPS, STATE_FIPS) %>%
+  summarise(total_events = n(), .groups = "drop")
+
+ggplot(cz_events_per_year, aes(x = YEAR, y = total_events)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#69b3a2") +
+  labs(
+    title = "Distribution of Storm Events per CZ_FIPS by Year",
+    x = "Year",
+    y = "Total Events per CZ_FIPS"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+```
+
+```{r cz_fipseventboxplotbydecade}
+library(dplyr)
+
+cz_events_per_decade <- storm_details_dmv_reloaded %>%
+  mutate(
+    YEAR = as.integer(substr(BEGIN_YEARMONTH, 1, 4)),
+    DECADE = paste0(floor(YEAR / 10) * 10, "s")
+  ) %>%
+  group_by(DECADE, CZ_FIPS, STATE_FIPS) %>%
+  summarise(total_events = n(), .groups = "drop")
+
+ggplot(cz_events_per_decade, aes(x = DECADE, y = total_events)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
+  labs(
+    title = "Distribution of Storm Events per CZ_FIPS by Decade",
+    x = "Decade",
+    y = "Total Events per CZ_FIPS"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+```
+
 ```{r noaa_tablejoin}
 #Joining these tables introduces cartesian joins into the data this should be approached with caution and intentionality.
 
