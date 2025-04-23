@@ -141,7 +141,6 @@ write_pipe_csv_gz <- function(df, output_dir, filename) {
   message("File written to: ", file_path)
 }
 
-
 write_pipe_csv_gz(storm_details_dmv, data_dir, "storm_details_dmv")
 ```
 
@@ -199,12 +198,33 @@ The above code chunk filters the events data to include only STATE_FIPS for DC/M
 ```{r noaatablesubset}
 library(dplyr)
 storm_details_df <- storm_details_df %>%
-  dplyr::select("BEGIN_YEARMONTH", "BEGIN_DAY", "BEGIN_TIME", "STATE", "STATE_FIPS", "YEAR", "MONTH_NAME", "EVENT_TYPE", "CZ_FIPS", "CZ_NAME", "BEGIN_DATE_TIME", "INJURIES_DIRECT", "INJURIES_INDIRECT", "DEATHS_DIRECT", "DEATHS_INDIRECT", "DAMAGE_PROPERTY", "DAMAGE_CROPS", "FLOOD_CAUSE", "BEGIN_LOCATION", "BEGIN_LAT", "BEGIN_LON"
+  dplyr::select("BEGIN_YEARMONTH",
+                "BEGIN_DAY",
+                "BEGIN_TIME",
+                "STATE",
+                "STATE_FIPS",
+                "YEAR",
+                "MONTH_NAME",
+                "EVENT_TYPE",
+                "CZ_FIPS",
+                "CZ_NAME",
+                "BEGIN_DATE_TIME",
+                "INJURIES_DIRECT",
+                "INJURIES_INDIRECT",
+                "DEATHS_DIRECT",
+                "DEATHS_INDIRECT",
+                "DAMAGE_PROPERTY",
+                "DAMAGE_CROPS",
+                "FLOOD_CAUSE",
+                "BEGIN_LOCATION",
+                "BEGIN_LAT",
+                "BEGIN_LON"
 )
 
 
-unique(storm_details_df$DAMAGE_CROPS)
 ```
+
+
 ```{r noaaevents_cleaning}
 storm_details_df <- storm_details_df %>%
   mutate(
@@ -232,6 +252,9 @@ storm_details_df <- storm_details_df %>%
     )
   )
 
+
+storm_details_df <- storm_details_df %>%
+  mutate(across(c(INJURIES_DIRECT, INJURIES_INDIRECT, DEATHS_DIRECT, DEATHS_INDIRECT), as.numeric))
 ```
 
 
@@ -252,6 +275,79 @@ storm_details_df <- storm_details_df %>%
 - Plot trends in:
   - Event frequency
   - Severity using damage amounts
+
+
+```{r noaaevents_annualdamage}
+# Summarize total damages by year and state
+annual_damage <- storm_details_df %>%
+  #filter(STATE_FIPS %in% c(11, 24, 51)) %>%
+  #group_by(STATE_FIPS, YEAR) %>%
+  group_by(YEAR) %>%
+  summarise(
+    TOTAL_DAMAGE = sum(DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+# Plot as column chart
+#ggplot(annual_damage, aes(x = YEAR, y = TOTAL_DAMAGE, fill = as.factor(STATE_FIPS))) +
+ggplot(annual_damage, aes(x = YEAR, y = TOTAL_DAMAGE)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Annual Flood-Related Damage by State (DC, MD, VA)",
+    x = "Year",
+    y = "Total Damage (USD)",
+    fill = "STATE_FIPS"
+  ) +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::dollar)
+
+#ggplot(annual_damage, aes(x = YEAR, y = log10(TOTAL_DAMAGE+1), fill = as.factor(STATE_FIPS))) +
+ggplot(annual_damage, aes(x = YEAR, y = log10(TOTAL_DAMAGE+1))) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Annual Flood-Related Damage by State (Log Scale)",
+    x = "Year",
+    y = "Log10(Total Damage in USD)",
+    fill = "STATE_FIPS"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+```{r noaaevents_annualcasualty}
+
+library(dplyr)
+library(ggplot2)
+
+# Summarize total casualties by year and state
+annual_total_casualties <- storm_details_df %>%
+  #group_by(STATE_FIPS, YEAR) %>%
+  group_by( YEAR) %>%
+  summarise(
+    TOTAL_CASUALTIES = sum(
+      DEATHS_DIRECT + DEATHS_INDIRECT + INJURIES_DIRECT + INJURIES_INDIRECT,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+# Plot as a column chart
+ggplot(annual_total_casualties, aes(x = YEAR, y = TOTAL_CASUALTIES, fill = as.factor(STATE_FIPS))) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Annual Flood-Related Casualties (Deaths + Injuries) by State",
+    x = "Year",
+    y = "Total Casualties",
+    fill = "STATE_FIPS"
+  ) +
+  theme_minimal()
+
+
+```
+
 
 
 
@@ -313,6 +409,8 @@ ggplot(storm_long, aes(x = YEAR, y = TOTAL_EVENTS, color = EVENT_TYPE)) +
 
 
 ```
+
+
 ```{r statecountypivot}
 
 library(dplyr)
