@@ -9,33 +9,42 @@ output: html_document
 # PROJECT NAME
 
 ## Frontmatter
-```{r ezidsetup}
+```{r ezidsetup,eval=FALSE}
 #https://github.com/physicsland/ezids
 if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
 install.packages ("devtools")
 devtools::install_github("physicsland/ezids")
+install.packages("ezids")
 ```
 The above installs ezids, a package manager developed and maintained by GW DS Department.
-
-
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 set.seed(20052)
 
-remotes::install_github("mikejohnson51/NFHL")
-remotes::install_github("mikejohnson51/AOI")
-
-install.packages("rfema", repos = "https://ropensci.r-universe.dev")
+#install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
 library(ezids)
 pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI", "tidycensus", "tigris","rfema","raster","stringr","xml2","rvest","httr","reader","purrr","readr")
 
 invisible(lapply(pkg_vector,loadPkg))
 
+data_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/"
 ```
 
+
+# 1. FEMA Flood Zone Extraction
+
+- Extract Layer 28 polygons for the DMV region using the `NFHL` R package.
+- Filter for **Special Flood Hazard Areas (SFHA)** using the condition `SFHA_TF == "T"`.
+
+# 2. NOAA Flood Event Collection
+
+- Download and filter NOAA flood events (1950–2023) by event type:
+  - Flood
+  - Flash Flood
+  - Coastal Flood
 
 ```{r noaa_bulkdatadownload, eval=FALSE}
 #This code chunk will download all the NOAA event data so don't run if data is already present in environment.
@@ -78,10 +87,12 @@ for (url in full_urls) {
 
 ```
 
+The above code chunk downloads NOAA Event Details for 1950-2024. It should only be run if data is not already present in development environment.
+
 ```{r noaa_rowjoin}
 #rowwise joins of event details, fatalities, and locations
 
-data_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test"
+
 files <- list.files(data_dir, pattern = "\\.csv\\.gz$", full.names = TRUE)
 
 details_files <- files[grepl("StormEvents_details", files)]
@@ -107,19 +118,10 @@ head(storm_details_df)
 
 ```
 
-```{r noaa_detailsfilter}
-#filters event details to include only DC, MD, VA state fips codes
-storm_details_dmv <- storm_details_df %>%
-  filter(STATE_FIPS %in% c("11", #DC
-                           "24", #MD
-                           "51"  #VA
-                           )) 
-```
+The above code chunk reads in and conducts a rowwise join of the annual NOAA event tables 
 
-```{r noaa_tablewrite}
+```{r noaa_tablewrite, eval=FALSE}
 #writes processed table
-
-data_dir = "C:/Users/russe/Documents/github/6289spatial_final/data"
 
 write_pipe_csv_gz <- function(df, output_dir, filename) {
   # Ensure the output directory exists
@@ -143,6 +145,9 @@ write_pipe_csv_gz <- function(df, output_dir, filename) {
 write_pipe_csv_gz(storm_details_dmv, data_dir, "storm_details_dmv")
 ```
 
+The above chunk will write the joined noaa event details table to data_dir.
+
+
 ```{r noaa_tableload}
 #will read the filtered storm_details_dmv.csv.gz saved to your repo data directory from GDrive
 
@@ -155,15 +160,100 @@ read_pipe_csv_gz <- function(input_dir, filename) {
     file = file_path,
     delim = "|",
     col_names = TRUE,
-    show_col_types = FALSE
+    show_col_types = FALSE,
+  col_types = cols(.default = col_character())
   )
   
   return(df)
 }
 
-storm_details_dmv_reloaded <- read_pipe_csv_gz(data_dir, "storm_details_dmv")
+storm_details_df <- as_tibble(read_pipe_csv_gz(data_dir, "storm_details_dmv"))
+```
+
+The above code chunk can be used to load a previously saved noaa event details .csv.gz to proceed with processing.
+
+```{r noaa_detailsfilter}
+#filters event details to include only DC, MD, VA state fips codes
+storm_details_df <- storm_details_df %>%
+  filter(STATE_FIPS %in% c("11", #DC
+                           "24", #MD
+                           "51"  #VA
+                           ))
+
+storm_details_df <- storm_details_df %>%
+  filter(EVENT_TYPE %in% c('Flash Flood',
+                           'Flood',
+                           'Coastal Flood'
+                           ))
+```
+
+The above code chunk filters the events data to include only STATE_FIPS for DC/MD/VA and to only include EVENT_TYPES of Coastal Flood, Flash Flood, or Flood.
+
+
+- Extract:
+  - Geolocation
+  - Event date
+  - Event type
+  - Damage estimates
+
+```{r noaatablesubset}
+library(dplyr)
+storm_details_df <- storm_details_df %>%
+  dplyr::select("BEGIN_YEARMONTH", "BEGIN_DAY", "BEGIN_TIME", "STATE", "STATE_FIPS", "YEAR", "MONTH_NAME", "EVENT_TYPE", "CZ_FIPS", "CZ_NAME", "BEGIN_DATE_TIME", "INJURIES_DIRECT", "INJURIES_INDIRECT", "DEATHS_DIRECT", "DEATHS_INDIRECT", "DAMAGE_PROPERTY", "DAMAGE_CROPS", "FLOOD_CAUSE", "BEGIN_LOCATION", "BEGIN_LAT", "BEGIN_LON"
+)
+
+
+unique(storm_details_df$DAMAGE_CROPS)
+```
+```{r noaaevents_cleaning}
+storm_details_df <- storm_details_df %>%
+  mutate(
+    DAMAGE_CROPS_CLEAN = case_when(
+      str_detect(DAMAGE_CROPS, regex("^[0-9.]+K$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_CROPS, regex("K", ignore_case = TRUE))) * 1e3,
+      str_detect(DAMAGE_CROPS, regex("^[0-9.]+M$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_CROPS, regex("M", ignore_case = TRUE))) * 1e6,
+      str_detect(DAMAGE_CROPS, "^[0-9.]+$") ~
+        as.numeric(DAMAGE_CROPS),
+      TRUE ~ NA_real_
+    )
+  )
+
+storm_details_df <- storm_details_df %>%
+  mutate(
+    DAMAGE_PROPERTY_CLEAN = case_when(
+      str_detect(DAMAGE_PROPERTY, regex("^[0-9.]+K$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_PROPERTY, regex("K", ignore_case = TRUE))) * 1e3,
+      str_detect(DAMAGE_PROPERTY, regex("^[0-9.]+M$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_PROPERTY, regex("M", ignore_case = TRUE))) * 1e6,
+      str_detect(DAMAGE_PROPERTY, "^[0-9.]+$") ~
+        as.numeric(DAMAGE_PROPERTY),
+      TRUE ~ NA_real_
+    )
+  )
 
 ```
+
+
+# 3. Spatial Join and Aggregation
+
+- Assign events to spatial units:
+  - Census tracts or
+  - ZIP Code Tabulation Areas (ZCTAs)
+- Count flood event frequency per spatial unit.
+- Overlay flood event hotspots on FEMA SFHA zones.
+- Identify:
+  - **Matching areas**: events occurring inside SFHA zones
+  - **Mismatch areas**: events occurring outside SFHA zones
+
+# 4. Time Series Analysis
+
+- Aggregate flood events by decade.
+- Plot trends in:
+  - Event frequency
+  - Severity using damage amounts
+
+
 
 
 
@@ -192,7 +282,7 @@ storm_pivot <- storm_summary %>%
 ```
 
 
-```{r}
+```{r eventtotalviz}
 library(tidyr)
 library(dplyr)
 
@@ -227,7 +317,7 @@ ggplot(storm_long, aes(x = YEAR, y = TOTAL_EVENTS, color = EVENT_TYPE)) +
 
 library(dplyr)
 
-cz_unique_count <- storm_details_dmv_reloaded %>%
+cz_unique_count <- storm_details_df %>%
   group_by(STATE_FIPS) %>%
   summarise(unique_cz_fips = n_distinct(CZ_FIPS), .groups = "drop")
 
@@ -240,7 +330,7 @@ library(dplyr)
 library(ggplot2)
 
 # Step 1: Extract year and count events per CZ_FIPS per year
-cz_events_per_year <- storm_details_dmv_reloaded %>%
+cz_events_per_year <- storm_details_df %>%
   mutate(YEAR = substr(BEGIN_YEARMONTH, 1, 4)) %>%
   group_by(YEAR, CZ_FIPS, STATE_FIPS) %>%
   summarise(total_events = n(), .groups = "drop")
@@ -262,7 +352,7 @@ ggplot(cz_events_per_year, aes(x = YEAR, y = total_events)) +
 ```{r cz_fipseventboxplotbydecade}
 library(dplyr)
 
-cz_events_per_decade <- storm_details_dmv_reloaded %>%
+cz_events_per_decade <- storm_details_df %>%
   mutate(
     YEAR = as.integer(substr(BEGIN_YEARMONTH, 1, 4)),
     DECADE = paste0(floor(YEAR / 10) * 10, "s")
@@ -294,7 +384,7 @@ ggplot(cz_events_per_decade, aes(x = DECADE, y = total_events)) +
 
 ```
 
-```{r noaa_tablejoin}
+```{r noaa_tablejoin,eval=FALSE}
 #Joining these tables introduces cartesian joins into the data this should be approached with caution and intentionality.
 
 # Start by joining details and locations (left join to keep all details)
@@ -338,7 +428,7 @@ full_storm_df <- left_join(
 
 ---old---
 
-```{r loaddata}
+```{r loaddata,eval=FALSE}
 
 nfhl_describe(28)
 
@@ -368,8 +458,7 @@ va_floodzone <- nfhl_get(va_aoi, 28)
 
 ```
 
-
-```{r samplecode}
+```{r samplecode, eval=FALSE}
 
 #sample code
 AOI <- AOI::aoi_ext("UCSB", wh = 10, units = "km", bbox = TRUE) |>
@@ -387,25 +476,16 @@ floodhazard <- nfhl_get(AOI, 28) %>%
 
 ```
 
-
-
-
-```{r testncload}
+```{r testncload, eval=FALSE}
 library("raster")
 r = raster("C:\\Users\\russe\\Downloads\\gpcp_v01r03_daily_d20101231_c20170530.nc")
 
 ```
 
-```{r testnoaaload}
+```{r testnoaaload,eval=FALSE}
 df <- read.table("C:\\Users\\russe\\Downloads\\DC_Features_20140204.txt", 
                  header = TRUE, 
                  sep = "|",
                  quote="",
                  stringsAsFactors = FALSE)
-```
-
-
-
-```{r}
-head(df)
 ```
