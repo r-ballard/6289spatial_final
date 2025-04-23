@@ -1,0 +1,112 @@
+Yo !
+
+
+```{r}
+
+library(sf)
+library(dplyr)
+library(readr)
+
+dc <- read_csv("/Users/andrewpaladino/Downloads/block_groups_dc.csv")
+va <- read_csv("/Users/andrewpaladino/Downloads/block_groups_va.csv")
+md <- read_csv("/Users/andrewpaladino/Downloads/block_groups_md.csv")
+osm_buildings <- read_csv("/Users/andrewpaladino/Documents/xyzeus/data/building_footprints.csv")
+noaa_flood_dc <- read_csv("/Users/andrewpaladino/Downloads/noaa_flood_dc.csv")
+storm_data <- read_delim("/Users/andrewpaladino/Downloads/storm_details_dmv.csv", delim = "|")
+
+bg_total <- bind_rows(dc, va, md)
+bg_total_geo <- st_as_sf(bg_total, wkt = "geometry", crs = 4326)
+bg_total_geo <- bg_total_geo %>%
+  rename(census_geometry = geometry)
+
+storm_data <- storm_data %>%
+  filter(!is.na(BEGIN_LAT) & !is.na(BEGIN_LON))
+
+storm_data_geo <- st_as_sf(storm_data, coords = c("BEGIN_LON", "BEGIN_LAT"), crs = 4326)
+census_stormdata <- st_join(storm_data_geo, bg_total_geo, join = st_within)
+
+census_stormdata <- census_stormdata %>%
+  mutate(
+    county_code = paste0(`attributes.STATE`, `attributes.COUNTY`),
+    tract_code = paste0(`attributes.STATE`, `attributes.COUNTY`, `attributes.TRACT`)
+  )
+
+census_stormdata$BEGIN_DATE_TIME <- as.POSIXct(
+  census_stormdata$BEGIN_DATE_TIME,
+  format = "%d-%b-%y %H:%M:%S",
+  tz = "UTC"
+)
+
+
+
+#####################################
+###########. aggregate event counts #
+#####################################
+
+
+# By YEAR, GIDBG, and census_geometry
+bg_group <- census_stormdata %>%
+  group_by(YEAR, GIDBG, census_geometry) %>%
+  summarize(event_count = n(), .groups = "drop")
+
+# Total events per GIDBG and census_geometry
+sum_bg_group <- bg_group %>%
+  group_by(GIDBG, census_geometry) %>%
+  summarize(total_events = sum(event_count), .groups = "drop")
+
+# By YEAR and tract_code
+tract_group <- census_stormdata %>%
+  group_by(YEAR, tract_code) %>%
+  summarize(event_count = n(), .groups = "drop")
+
+# By YEAR and county_code
+county_group <- census_stormdata %>%
+  group_by(YEAR, county_code) %>%
+  summarize(event_count = n(), .groups = "drop")
+
+# By YEAR and STATE
+state_group <- census_stormdata %>%
+  group_by(YEAR, STATE) %>%
+  summarize(event_count = n(), .groups = "drop")
+
+
+
+###########################
+######### PLOTS ###########
+###########################
+
+library(ggplot2)
+
+ggplot(bg_group, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by GIDBG", x = "Year", y = "Event Count") +
+  theme_minimal()
+
+ggplot(tract_group, aes(x = YEAR, y = event_count, color = tract_code, group = tract_code)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract Code", x = "Year", y = "Event Count") +
+  theme_minimal()
+
+ggplot(county_group, aes(x = YEAR, y = event_count, color = county_code, group = county_code)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by County Code", x = "Year", y = "Event Count") +
+  theme_minimal()
+
+ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by State", x = "Year", y = "Event Count") +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+block_groups_all
+
+
+```
