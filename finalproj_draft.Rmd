@@ -9,7 +9,7 @@ output: html_document
 # PROJECT NAME
 
 ## Frontmatter
-```{r ezidsetup}
+```{r ezidsetup, eval= FALSE}
 #https://github.com/physicsland/ezids
 if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
 install.packages ("devtools")
@@ -39,3 +39,38 @@ invisible(lapply(pkg_vector,loadPkg))
 
 
 
+
+# 1. FEMA Flood Zone Extraction
+
+- Extract Layer 28 polygons for the DMV region using the `NFHL` R package.
+- Filter for **Special Flood Hazard Areas (SFHA)** using the condition `SFHA_TF == "T"`.
+
+# 2. NOAA Flood Event Collection
+
+- Download and filter NOAA flood events (1950–2023) by event type:
+  - Flood
+  - Flash Flood
+  - Coastal Flood
+- Extract:
+  - Geolocation
+  - Event date
+  - Event type
+  - Damage estimates
+
+# 3. Spatial Join and Aggregation
+
+- Assign events to spatial units:
+  - Census tracts or
+  - ZIP Code Tabulation Areas (ZCTAs)
+- Count flood event frequency per spatial unit.
+- Overlay flood event hotspots on FEMA SFHA zones.
+- Identify:
+  - **Matching areas**: events occurring inside SFHA zones
+  - **Mismatch areas**: events occurring outside SFHA zones
+
+# 4. Time Series Analysis
+
+- Aggregate flood events by decade.
+- Plot trends in:
+  - Event frequency
+  - Severity using damage amounts
