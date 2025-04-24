@@ -255,6 +255,17 @@ storm_details_df <- storm_details_df %>%
 
 storm_details_df <- storm_details_df %>%
   mutate(across(c(INJURIES_DIRECT, INJURIES_INDIRECT, DEATHS_DIRECT, DEATHS_INDIRECT), as.numeric))
+
+
+storm_details_df <- storm_details_df %>%
+  mutate(
+    FIPS5 = paste0(STATE_FIPS, str_pad(CZ_FIPS, width = 3, pad = "0"))
+  )
+
+storm_details_df <- storm_details_df %>%
+  mutate(
+    TOTAL_DAMAGE = DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN
+  )
 ```
 
 
@@ -313,7 +324,25 @@ ggplot(annual_damage, aes(x = YEAR, y = log10(TOTAL_DAMAGE+1))) +
   ) +
   theme_minimal()
 
+```
 
+```{r noaa_annualdamageboxplots}
+# Step 2: Aggregate by FIPS5 and YEAR
+annual_fips_damage <- storm_details_df %>%
+  group_by(FIPS5, YEAR) %>%
+  summarise(TOTAL_DAMAGE = sum(TOTAL_DAMAGE, na.rm = TRUE), .groups = "drop")
+
+# Step 3: Plot boxplots
+ggplot(annual_fips_damage, aes(x = factor(YEAR), y = TOTAL_DAMAGE)) +
+  geom_boxplot(outlier.shape = 21, fill = "lightblue") +
+  scale_y_log10(labels = scales::dollar) +  # log scale for readability
+  labs(
+    title = "Annual Distribution of Flood Damage by County (FIPS5)",
+    x = "Year",
+    y = "Total Damage (log scale)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
@@ -587,3 +616,241 @@ df <- read.table("C:\\Users\\russe\\Downloads\\DC_Features_20140204.txt",
                  quote="",
                  stringsAsFactors = FALSE)
 ```
+
+
+
+#test flood layer extract
+
+```{r nfhlextract_test}
+
+library(sf)
+library(dplyr)
+library(tigris)    # for county boundaries
+options(tigris_use_cache = TRUE)
+library(httr)
+
+# Load county geometries for DC, MD, VA
+counties <- counties(state = c("11", "24", "51"), cb = TRUE, class = "sf")
+
+getwd()
+
+counties_df <- st_drop_geometry(counties)
+write_csv(counties_df, "data/test/counties_dc_md_va.csv")
+
+# Add WKT geometry as a new column
+counties_wkt <- counties %>%
+  mutate(geometry_wkt = st_as_text(geometry)) %>%
+  st_drop_geometry()
+
+# Write to CSV
+write_csv(counties_wkt, "data/test/counties_dc_md_va_wkt.csv")
+
+
+
+
+
+get_nfhl_by_county <- function(county_sf) {
+  if (nrow(county_sf) != 1) stop("Please pass a single county geometry.")
+
+  # Bounding box
+  bbox <- st_bbox(county_sf)
+
+  # FEMA NFHL Layer 28 API endpoint
+  url <- "https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28/query"
+
+  # Create POST body (xMin, yMin, xMax, yMax)
+  body <- list(
+    f = "geojson",
+    where = "1=1",
+    geometryType = "esriGeometryEnvelope",
+    geometry = paste0('{"xmin":', bbox["xmin"],
+                      ',"ymin":', bbox["ymin"],
+                      ',"xmax":', bbox["xmax"],
+                      ',"ymax":', bbox["ymax"],
+                      ',"spatialReference":{"wkid":4326}}'),
+    inSR = "4326",
+    spatialRel = "esriSpatialRelIntersects",
+    outFields = "*",
+    returnGeometry = "true"
+  )
+
+  # Send POST request
+  res <- POST(url, body = body, encode = "form")
+
+  if (status_code(res) == 200) {
+    temp_file <- tempfile(fileext = ".geojson")
+    writeBin(content(res, "raw"), temp_file)
+
+    tryCatch({
+      st_read(temp_file, quiet = TRUE)
+    }, error = function(e) {
+      message("Failed to parse GeoJSON for county: ", county_sf$NAME)
+      NULL
+    })
+  } else {
+    message("Request failed with status: ", status_code(res), " for county: ", county_sf$NAME)
+    NULL
+  }
+}
+
+# Test with one county (e.g., Arlington)
+arlington <- counties[counties$NAME == "Arlington", ]
+arlington_zones <- get_nfhl_by_county(arlington)
+
+
+```
+
+
+
+
+```{r createnfhldf}
+library(rvest)
+library(dplyr)
+library(stringr)
+library(tidyr)
+
+# FEMA NFHL base URL
+base_url <- "https://hazards.fema.gov/femaportal/NFHL/"
+target_url <- paste0(base_url, "searchResult")
+
+# Read page
+page <- read_html(target_url)
+
+# Extract all table rows
+rows <- page %>% html_nodes("tr")
+
+# Parse each row into fields: FIRMID, County, State, Date, Size, Link
+nfhl_df <- rows %>%
+  map_df(~{
+    tds <- .x %>% html_nodes("td")
+    if (length(tds) < 6) return(NULL)  # skip malformed rows
+
+    list(
+      dfirm_id = tds[1] %>% html_text(trim = TRUE),
+      county = tds[2] %>% html_text(trim = TRUE),
+      state = tds[3] %>% html_text(trim = TRUE),
+      effective_date = tds[4] %>% html_text(trim = TRUE),
+      file_size = tds[5] %>% html_text(trim = TRUE),
+      url = tds[6] %>% html_node("a") %>% html_attr("href") %>% paste0(base_url, .)
+    )
+  }) %>%
+  filter(str_detect(dfirm_id, "^(11|24|51).*")) %>%
+  mutate(url = URLencode(url, reserved = TRUE))
+
+# Preview
+print(head(nfhl_df))
+
+
+
+
+```
+
+
+```{r nfhl_scrape}
+
+library(rvest)
+library(stringr)
+library(purrr)
+
+# Base URL and scrape target
+base_url <- "https://hazards.fema.gov/femaportal/NFHL/"
+target_url <- paste0(base_url, "searchResult")
+
+# Read and parse HTML
+page <- read_html(target_url)
+
+# Extract all download links with their file names
+zip_links <- page %>%
+  html_nodes("a") %>%
+  html_attr("href") %>%
+  na.omit() %>%
+  str_subset("^Download/ProductsDownLoadServlet\\?DFIRMID=") %>%
+  unique()
+
+# Filter by DFIRMID prefix: 11, 24, or 51
+filtered_links <- zip_links %>%
+  str_subset("^Download/ProductsDownLoadServlet\\?DFIRMID=(11|24|51)")
+
+# Convert to full URLs
+full_urls <- paste0(base_url, filtered_links)
+full_urls <- gsub(" ", "%20", full_urls)
+
+
+# Optional: Set destination folder
+dest_dir <- "data/test/nfhl_zips"
+dir.create(dest_dir, showWarnings = FALSE)
+
+# Download function with polite wait
+download_nfhl_zip <- function(url, delay = 3) {
+  file_name <- str_extract(url, "fileName=[^&]+") %>%
+    str_remove("fileName=")
+  dest_file <- file.path(dest_dir, file_name)
+
+  if (!file.exists(dest_file)) {
+    message("Downloading: ", file_name)
+    tryCatch({
+      download.file(url, destfile = dest_file, mode = "wb")
+      Sys.sleep(delay)
+    }, error = function(e) {
+      message("Error downloading ", file_name)
+    })
+  } else {
+    message("Already downloaded: ", file_name)
+  }
+}
+
+# Loop and download
+walk(full_urls, download_nfhl_zip)
+
+```
+
+
+```{r read shapefile}
+library(sf)
+library(dplyr)
+
+# Example: pick one ZIP file
+zip_path <- "data/test/nfhl_zips/24001C_20231112.zip"  # Update path to your example
+
+# Temporary folder to extract to
+extract_dir <- tempfile(pattern = "nfhl_")
+dir.create(extract_dir)
+
+# Unzip contents
+unzip(zip_path, exdir = extract_dir)
+
+# List extracted files
+extracted_files <- list.files(extract_dir, recursive = TRUE, full.names = TRUE)
+
+# Find the .shp file (or pick manually if multiple)
+shp_file <- extracted_files[grepl("\\.shp$", extracted_files, ignore.case = TRUE)]
+
+# Just for clarity: if multiple SHPs exist, pick one:
+# (Here just picking the first)
+shp_file <- shp_file[3]
+
+# Read shapefile with sf
+flood_layer <- st_read(shp_file)
+
+# Preview
+print(flood_layer)
+
+
+
+testdf <- flood_layer$FLD_ZONE
+
+
+simple_df <- flood_layer %>%
+  dplyr::select(FLD_ZONE, FLD_AR_ID) %>%
+  st_drop_geometry()
+
+simple_df %>%
+  count(FLD_ZONE, name = "count") %>%
+  arrange(desc(count))
+
+
+# flood_layer %>%
+#   count(FLD_ZONE, name = "count") %>%
+#   arrange(desc(count))
+```
+
