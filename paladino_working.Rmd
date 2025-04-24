@@ -194,3 +194,43 @@ ggplot(sum_bg_group) +
 
 ```
 
+
+```{r}
+sum(is.na(bg_group$census_geometry))  # should be 0
+```
+
+
+```{r}
+
+#install.packages("gganimate")
+#install.packages("transformr")  # needed for transitions
+#install.packages("gifski")
+#install.packages("png")
+#install.packages("av")
+library(ggplot2)
+library(gganimate)
+library(sf)
+
+
+p <- ggplot(bg_group) +
+  geom_sf(aes(fill = event_count), color = NA) +
+  scale_fill_viridis_c(option = "plasma", name = "Event Count") +
+  labs(
+    title = 'Event Count by Block Group — Year: {current_frame}',
+    subtitle = "Animated Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal() +
+  transition_manual(frames = YEAR)
+
+
+
+```
+
+
+```{r}
+animate(p, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
+
+```
+
+
