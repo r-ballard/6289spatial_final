@@ -316,4 +316,22 @@ animate(flood_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski
 
 ```
 
+#### different maps and casualties, different things with flood events
+###### join on events, flood hazard ---- determine % of events fall within and % of events fall outside flood zones... this will determine if flood zones need remapped ### /Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv
+###### join on flood hazard, census tracts ... maybe?? 
+
+
+```{r}
+flood_events
+
+# event type
+# damage property 
+# damage crops
+# margnitude
+# deaths direct 
+# deaths indirect 
+# injuries direct 
+# injuries indirect
+
+```
 
