@@ -177,10 +177,10 @@ ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)
 
 ```
 
-```{r}
+```{r, fig.width=10, fig.height=8}
 
 ggplot(sum_bg_group) +
-  geom_sf(aes(fill = total_events), color = NA, size = 0.1) +
+  geom_sf(aes(fill = total_events), color = NA, size = 0.4) +
   scale_fill_viridis_c(option = "plasma", name = "Event Count") +
   labs(
     title = "Total Events per Block Group",
