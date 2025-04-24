@@ -40,6 +40,23 @@ census_stormdata$BEGIN_DATE_TIME <- as.POSIXct(
   tz = "UTC"
 )
 
+#####################################
+###########. solely flooding events #
+#####################################
+
+library(stringr)
+
+# Define regex pattern
+flood_keywords <- "flood|flash flood|flooding"
+
+# Filter flood-related events
+flood_events <- census_stormdata %>%
+  filter(
+    str_detect(EVENT_TYPE, regex(flood_keywords, ignore_case = TRUE)) |
+    str_detect(EPISODE_NARRATIVE, regex(flood_keywords, ignore_case = TRUE)) |
+    str_detect(EVENT_NARRATIVE, regex(flood_keywords, ignore_case = TRUE))
+  )
+
 
 #####################################
 ###########. aggregate event counts #
@@ -207,6 +224,9 @@ sum(is.na(bg_group$census_geometry))  # should be 0
 #install.packages("gifski")
 #install.packages("png")
 #install.packages("av")
+#install.packages("ggspatial")
+#install.packages("rosm")
+
 library(ggplot2)
 library(gganimate)
 library(sf)
