@@ -4,6 +4,8 @@ Yo !
 ```{r}
 
 library(sf)
+library(plotly)
+sf_use_s2(FALSE)
 library(dplyr)
 library(readr)
 
@@ -17,7 +19,8 @@ storm_data <- read_delim("/Users/andrewpaladino/Downloads/storm_details_dmv.csv"
 bg_total <- bind_rows(dc, va, md)
 bg_total_geo <- st_as_sf(bg_total, wkt = "geometry", crs = 4326)
 bg_total_geo <- bg_total_geo %>%
-  rename(census_geometry = geometry)
+  mutate(census_geometry = geometry)
+bg_total_geo <- st_make_valid(bg_total_geo)
 
 storm_data <- storm_data %>%
   filter(!is.na(BEGIN_LAT) & !is.na(BEGIN_LON))
@@ -38,7 +41,6 @@ census_stormdata$BEGIN_DATE_TIME <- as.POSIXct(
 )
 
 
-
 #####################################
 ###########. aggregate event counts #
 #####################################
@@ -48,6 +50,7 @@ census_stormdata$BEGIN_DATE_TIME <- as.POSIXct(
 bg_group <- census_stormdata %>%
   group_by(YEAR, GIDBG, census_geometry) %>%
   summarize(event_count = n(), .groups = "drop")
+
 
 # Total events per GIDBG and census_geometry
 sum_bg_group <- bg_group %>%
@@ -102,11 +105,10 @@ ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)
   theme_minimal()
 
 
+
 ```
 
 ```{r}
-
-block_groups_all
 
 
 ```
