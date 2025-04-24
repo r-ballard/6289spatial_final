@@ -960,7 +960,7 @@ distinct_na_A_FIPS5 <- events_flood_df %>%
 ```
 
 ```{r writeeventsflood}
-
+write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
 
 ```
 
