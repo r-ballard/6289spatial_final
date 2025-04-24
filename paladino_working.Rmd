@@ -8,6 +8,8 @@ library(plotly)
 sf_use_s2(FALSE)
 library(dplyr)
 library(readr)
+library(ggplot2)
+
 
 dc <- read_csv("/Users/andrewpaladino/Downloads/block_groups_dc.csv")
 va <- read_csv("/Users/andrewpaladino/Downloads/block_groups_va.csv")
@@ -68,8 +70,16 @@ bg_group <- census_stormdata %>%
   group_by(YEAR, GIDBG, census_geometry) %>%
   summarize(event_count = n(), .groups = "drop")
 
+bg_group_flood <- flood_events %>%
+  group_by(YEAR, GIDBG, census_geometry) %>%
+  summarize(event_count = n(), .groups = "drop")
+
 # Total events per GIDBG and census_geometry
 sum_bg_group <- bg_group %>%
+  group_by(GIDBG, census_geometry) %>%
+  summarize(total_events = sum(event_count), .groups = "drop")
+
+sum_bg_group_flood <- bg_group_flood %>%
   group_by(GIDBG, census_geometry) %>%
   summarize(total_events = sum(event_count), .groups = "drop")
 
@@ -78,8 +88,16 @@ tract_group <- census_stormdata %>%
   group_by(YEAR, tract_code) %>%
   summarize(event_count = n(), .groups = "drop")
 
+tract_group_flood <- flood_events %>%
+  group_by(YEAR, tract_code) %>%
+  summarize(event_count = n(), .groups = "drop")
+
 # By YEAR and county_code
 county_group <- census_stormdata %>%
+  group_by(YEAR, county_code) %>%
+  summarize(event_count = n(), .groups = "drop")
+
+county_group_flood <- flood_events %>%
   group_by(YEAR, county_code) %>%
   summarize(event_count = n(), .groups = "drop")
 
@@ -88,45 +106,30 @@ state_group <- census_stormdata %>%
   group_by(YEAR, STATE) %>%
   summarize(event_count = n(), .groups = "drop")
 
+state_group_flood <- flood_events %>%
+  group_by(YEAR, STATE) %>%
+  summarize(event_count = n(), .groups = "drop")
 
 
-###########################
-######### PLOTS ###########
-###########################
+```
 
-library(ggplot2)
+# PLOTS
+
+```{r}
 
 ggplot(bg_group, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
   geom_line() +
   geom_point() +
   labs(title = "Event Count by GIDBG", x = "Year", y = "Event Count") +
-  theme_minimal()
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
 
-ggplot(tract_group, aes(x = YEAR, y = event_count, color = tract_code, group = tract_code)) +
-  geom_line() +
-  geom_point() +
-  labs(title = "Event Count by Tract Code", x = "Year", y = "Event Count") +
-  theme_minimal()
-
-ggplot(county_group, aes(x = YEAR, y = event_count, color = county_code, group = county_code)) +
-  geom_line() +
-  geom_point() +
-  labs(title = "Event Count by County Code", x = "Year", y = "Event Count") +
-  theme_minimal()
-
-ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
-  geom_line() +
-  geom_point() +
-  labs(title = "Event Count by State", x = "Year", y = "Event Count") +
-  theme_minimal()
-
-
-
-```
-
-```{r}
-
-ggplot(bg_group, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
+ggplot(bg_group_flood, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
   geom_line() +
   geom_point() +
   labs(title = "Event Count by GIDBG", x = "Year", y = "Event Count") +
@@ -144,6 +147,18 @@ ggplot(bg_group, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
 ```{r}
 
 ggplot(tract_group, aes(x = YEAR, y = event_count, color = tract_code, group = tract_code)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
+
+ggplot(tract_group_flood, aes(x = YEAR, y = event_count, color = tract_code, group = tract_code)) +
   geom_line() +
   geom_point() +
   labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
@@ -174,12 +189,37 @@ ggplot(county_group, aes(x = YEAR, y = event_count, color = county_code, group =
   guides(color = guide_legend(nrow = 3, byrow = TRUE))
 
 
+ggplot(county_group_flood, aes(x = YEAR, y = event_count, color = county_code, group = county_code)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
+
+
 ```
 
 
 ```{r}
 
 ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
+
+ggplot(state_group_flood, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
   geom_line() +
   geom_point() +
   labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
@@ -207,6 +247,15 @@ ggplot(sum_bg_group) +
   theme_minimal()
 
 
+ggplot(sum_bg_group_flood) +
+  geom_sf(aes(fill = total_events), color = NA, size = 0.4) +
+  scale_fill_viridis_c(option = "plasma", name = "Event Count") +
+  labs(
+    title = "Total Events per Block Group",
+    subtitle = "GIDBG-level Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal()
 
 
 ```
@@ -232,7 +281,20 @@ library(gganimate)
 library(sf)
 
 
-p <- ggplot(bg_group) +
+all_events_ani <- ggplot(bg_group) +
+  geom_sf(aes(fill = event_count), color = NA) +
+  scale_fill_viridis_c(option = "plasma", name = "Event Count") +
+  labs(
+    title = 'Event Count by Block Group — Year: {current_frame}',
+    subtitle = "Animated Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal() +
+  transition_manual(frames = YEAR)
+
+
+
+flood_events_ani <- ggplot(bg_group_flood) +
   geom_sf(aes(fill = event_count), color = NA) +
   scale_fill_viridis_c(option = "plasma", name = "Event Count") +
   labs(
@@ -249,7 +311,8 @@ p <- ggplot(bg_group) +
 
 
 ```{r}
-animate(p, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
+animate(all_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
+animate(flood_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
 
 ```
 
