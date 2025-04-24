@@ -805,7 +805,7 @@ walk(full_urls, download_nfhl_zip)
 ```
 
 
-```{r read shapefile}
+```{r read_singleshapefile}
 library(sf)
 library(dplyr)
 
@@ -852,5 +852,186 @@ simple_df %>%
 # flood_layer %>%
 #   count(FLD_ZONE, name = "count") %>%
 #   arrange(desc(count))
+
+missing_in_counties <- outputs %>%
+  filter(!(GEOID %in% counties_wkt$GEOID))
+
+missing_in_outputs <- counties_wkt %>%
+  filter(!(GEOID %in% outputs$GEOID))
+
+
+link_df
 ```
 
+
+```{r constructlinktable}
+library(tigris)
+library(dplyr)
+
+# Get all U.S. counties (this pulls GEOID, NAME, STATEFP, COUNTYFP)
+county_sf <- counties(cb = TRUE, year = 2023)
+
+# Just keep needed fields and convert to character
+fips_df <- county_sf %>%
+  st_drop_geometry() %>%
+  transmute(
+    NAME,
+    STATEFP,
+    COUNTYFP,
+    FIPS5 = paste0(STATEFP, COUNTYFP),
+    GEOID = GEOID  # This should match FIPS5 normally
+  )
+
+# Your FEMA output GEOIDs (e.g., from the earlier script)
+fema_geoids <- outputs %>%
+  distinct(GEOID) %>%
+  pull()
+
+# Identify GEOIDs that are in FEMA data but not in official FIPS5
+fema_geoids_df <- tibble(FEMA_GEOID = fema_geoids)
+
+lookup_table <- fema_geoids_df %>%
+  anti_join(fips_df, by = c("FEMA_GEOID" = "FIPS5"))
+
+manual_fixes <- tibble(
+  FEMA_DFIRM = c("11000", #DC City
+                 "24000", #Baltimore City
+                 "51002", #Bristol City
+                 "51004", #Cumberland County, there are two shapefile sets for this data, also exists as 51049, fips 51049
+                 "51006", #Franklin City
+                 "51008", #City of Hopewell
+                 "51010", #City of Norfolk
+                 "51012", #City of Radford
+                 "51018", # City of Poquoson
+                 "51551", # City of Alexandria),
+                 "51540"), #City of Charlottesville
+  FIPS5 = c("11001", #DC City
+            "24005", #Baltimore City
+            "51502", #Bristol City
+            "51049", #Cumberland County
+            "51620", #Franklin City
+            "51670", #City of Hopewell
+            "51710 ", #City of Norfolk
+            "51750", #City of Radford
+            "51735", #City of Poquoson
+            "51510", #City of Alexandria
+            "51003"
+            ))
+
+```
+
+```{r manualfix_nhfl}
+outputs2 <- outputs %>%
+  left_join(manual_fixes, by = c("GEOID" = "FEMA_DFIRM")) %>%
+  mutate(GEOID = if_else(!is.na(FIPS5), FIPS5, GEOID)) %>%
+  dplyr::select(-FIPS5)
+
+outputs$COUNT <- as.numeric(outputs$COUNT)
+
+outputs_wide <- outputs2 %>%
+  group_by(GEOID, FLD_ZONE) %>%
+  summarise(COUNT = sum(COUNT, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(
+    names_from = FLD_ZONE,
+    values_from = COUNT,
+    values_fill = list(COUNT = 0)
+  )
+
+
+```
+
+```{r join_nfhlouttonoaaevent}
+
+library(dplyr)
+
+events_flood_df <- storm_details_df %>%
+  left_join(outputs_wide, by = c("FIPS5" = "GEOID"))
+
+
+subset_na_A <- events_flood_df %>%
+  filter(is.na(A)) %>%
+  dplyr::select(FIPS5, STATE, CZ_NAME)
+
+distinct_na_A_FIPS5 <- events_flood_df %>%
+  filter(is.na(A)) %>%
+  dplyr::select(FIPS5, STATE, CZ_NAME) %>%
+  distinct(FIPS5, .keep_all = TRUE)
+
+```
+
+```{r writeeventsflood}
+
+
+```
+
+
+```{r create_geoidpivot}
+
+library(sf)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(purrr)
+
+# Directory containing your zip files
+zip_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test/nfhl_zips"
+
+# List of zip files (assuming they start with 5-digit GEOID prefix)
+zip_files <- list.files(zip_dir, pattern = "^\\d{5}.*\\.zip$", full.names = TRUE)
+
+# Initialize output data frame
+outputs <- tibble(GEOID = character(), FLD_ZONE = character(), COUNT = integer())
+
+# Loop through each zip file
+for (zip_path in zip_files) {
+  # Extract the 5-digit GEOID from the filename
+  geoid <- str_extract(basename(zip_path), "^\\d{5}")
+
+  # Create temporary directory for extraction
+  temp_dir <- tempfile(pattern = "nfhl_")
+  dir.create(temp_dir)
+
+  # Extract contents
+  unzip(zip_path, exdir = temp_dir)
+
+  # Look for the S_FLD_HAZ_AR.shp shapefile
+  shp_files <- list.files(temp_dir, pattern = "S_FLD_HAZ_AR\\.shp$", recursive = TRUE, full.names = TRUE)
+  if (length(shp_files) == 0) {
+    message(glue::glue("No shapefile found in {zip_path}, skipping."))
+    unlink(temp_dir, recursive = TRUE)
+    next
+  }
+
+  # Load shapefile
+  flood_layer <- tryCatch({
+    st_read(shp_files[1], quiet = TRUE)
+  }, error = function(e) {
+    message(glue::glue("Failed to read shapefile in {zip_path}, skipping."))
+    unlink(temp_dir, recursive = TRUE)
+    return(NULL)
+  })
+
+  if (is.null(flood_layer)) next
+
+  # Summarize FLD_ZONE counts
+  pivot <- flood_layer %>%
+    st_drop_geometry() %>%
+    count(FLD_ZONE, name = "COUNT") %>%
+    mutate(GEOID = geoid) %>%
+    dplyr::select(GEOID, FLD_ZONE, COUNT)
+
+  # Append to outputs
+  outputs <- bind_rows(outputs, pivot)
+
+  # Cleanup
+  unlink(temp_dir, recursive = TRUE)
+}
+
+write.csv(outputs, file = "data/outputs.csv", row.names = FALSE)
+
+```
+
+```{r load_outputs}
+
+outputs <- read_csv("data/outputs.csv", col_types = cols(.default = "c"))
+```
