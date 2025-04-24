@@ -51,7 +51,6 @@ bg_group <- census_stormdata %>%
   group_by(YEAR, GIDBG, census_geometry) %>%
   summarize(event_count = n(), .groups = "drop")
 
-
 # Total events per GIDBG and census_geometry
 sum_bg_group <- bg_group %>%
   group_by(GIDBG, census_geometry) %>%
@@ -126,6 +125,72 @@ ggplot(bg_group, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
 
 
 ```{r}
+
+ggplot(tract_group, aes(x = YEAR, y = event_count, color = tract_code, group = tract_code)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
+
+```
+
+
+
+```{r}
+
+ggplot(county_group, aes(x = YEAR, y = event_count, color = county_code, group = county_code)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
+
+
+```
+
+
+```{r}
+
+ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
+
+
+```
+
+```{r}
+
+ggplot(sum_bg_group) +
+  geom_sf(aes(fill = total_events), color = NA, size = 0.1) +
+  scale_fill_viridis_c(option = "plasma", name = "Event Count") +
+  labs(
+    title = "Total Events per Block Group",
+    subtitle = "GIDBG-level Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal()
+
+
+
 
 ```
 
