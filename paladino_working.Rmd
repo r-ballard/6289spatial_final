@@ -110,5 +110,22 @@ ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)
 
 ```{r}
 
+ggplot(bg_group, aes(x = YEAR, y = event_count, color = GIDBG, group = GIDBG)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Event Count by GIDBG", x = "Year", y = "Event Count") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(0.3, "cm"),
+    legend.text = element_text(size = 6)
+  ) +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE))
 
 ```
+
+
+```{r}
+
+```
+
