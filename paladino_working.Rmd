@@ -42,9 +42,93 @@ census_stormdata$BEGIN_DATE_TIME <- as.POSIXct(
   tz = "UTC"
 )
 
-#####################################
-###########. solely flooding events #
-#####################################
+############################################################################
+##### Mapping State Name and County Names to begin lat / begin long ########
+############################################################################
+
+
+# 1. Create the FIPS to State mapping
+fips_to_state <- c(
+  `11` = "DISTRICT OF COLUMBIA",
+  `24` = "MARYLAND",
+  `51` = "VIRGINIA"
+)
+
+# 2. Create Virginia and Maryland counties as dataframes
+va_counties <- tibble::tibble(
+  attributes.COUNTY = c(1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29,
+                        31, 33, 35, 36, 37, 41, 43, 45, 47, 49, 51, 53, 57, 59, 61,
+                        63, 65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85, 87, 89, 91,
+                        93, 95, 97, 99, 101, 103, 105, 107, 109, 111, 113, 115, 117,
+                        119, 121, 125, 127, 131, 133, 135, 137, 139, 141, 143, 145,
+                        147, 149, 153, 155, 157, 159, 161, 163, 165, 167, 169, 171,
+                        173, 175, 177, 179, 181, 183, 185, 187, 191, 193, 195, 197,
+                        199, 510, 520, 530, 540, 550, 570, 590, 610, 620, 630, 640,
+                        650, 660, 670, 680, 683, 690, 700, 710, 720, 730, 735, 740,
+                        750, 760, 770, 775, 790, 800, 810, 820, 830, 840),
+  County_Name = c(
+    "Accomack", "Albemarle", "Alleghany", "Amelia", "Amherst",
+    "Appomattox", "Arlington", "Augusta", "Bath", "Bedford",
+    "Bland", "Botetourt", "Brunswick", "Buchanan", "Buckingham",
+    "Campbell", "Caroline", "Carroll", "Charles City", "Charlotte",
+    "Chesterfield", "Clarke", "Craig", "Culpeper", "Cumberland",
+    "Dickenson", "Dinwiddie", "Essex", "Fairfax", "Fauquier",
+    "Floyd", "Fluvanna", "Franklin", "Frederick", "Giles",
+    "Gloucester", "Goochland", "Grayson", "Greene", "Greensville",
+    "Halifax", "Hanover", "Henrico", "Henry", "Highland",
+    "Isle of Wight", "James City", "King and Queen", "King George",
+    "King William", "Lancaster", "Lee", "Loudoun", "Louisa",
+    "Lunenburg", "Madison", "Mathews", "Mecklenburg", "Middlesex",
+    "Montgomery", "Nelson", "New Kent", "Northampton", "Northumberland",
+    "Nottoway", "Orange", "Page", "Patrick", "Pittsylvania",
+    "Powhatan", "Prince Edward", "Prince George", "Prince William",
+    "Pulaski", "Rappahannock", "Richmond", "Roanoke", "Rockbridge",
+    "Rockingham", "Russell", "Scott", "Shenandoah", "Smyth",
+    "Southampton", "Spotsylvania", "Stafford", "Surry", "Sussex",
+    "Tazewell", "Warren", "Washington", "Westmoreland", "Wise",
+    "Wythe", "York", "Alexandria City", "Bristol City", "Buena Vista City",
+    "Charlottesville City", "Chesapeake City", "Colonial Heights City",
+    "Danville City", "Falls Church City", "Franklin City", "Fredericksburg City",
+    "Galax City", "Hampton City", "Harrisonburg City", "Hopewell City",
+    "Lynchburg City", "Manassas City", "Martinsville City", "Newport News City",
+    "Norfolk City", "Norton City", "Petersburg City", "Poquoson City",
+    "Portsmouth City", "Radford City", "Richmond City", "Roanoke City",
+    "Salem City", "Staunton City", "Suffolk City", "Virginia Beach City",
+    "Waynesboro City", "Williamsburg City", "Winchester City"
+  ),
+  attributes.STATE = 51  # Virginia
+)
+
+md_counties <- tibble::tibble(
+  attributes.COUNTY = c(1, 3, 5, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31,
+                        33, 35, 37, 39, 41, 43, 45, 47, 510),
+  County_Name = c(
+    "Allegany", "Anne Arundel", "Baltimore", "Calvert", "Caroline",
+    "Carroll", "Cecil", "Charles", "Dorchester", "Frederick",
+    "Garrett", "Harford", "Howard", "Kent", "Montgomery",
+    "Prince Georges", "Queen Annes", "St. Marys", "Somerset",
+    "Talbot", "Washington", "Wicomico", "Worcester", "Baltimore City"
+  ),
+  attributes.STATE = 24  # Maryland
+)
+
+# 3. Combine into a county lookup table
+county_lookup <- bind_rows(va_counties, md_counties)
+
+# 4. Map State Name
+census_stormdata <- census_stormdata %>%
+  mutate(STATE_MAPPED = recode(as.character(attributes.STATE), !!!fips_to_state))
+
+census_stormdata <- census_stormdata %>%
+  mutate(attributes.COUNTY = as.numeric(attributes.COUNTY))
+
+# 5. Merge county names
+census_stormdata <- census_stormdata %>%
+  left_join(county_lookup, by = c("attributes.STATE", "attributes.COUNTY"))
+
+#########################################
+###########. solely flooding events #####
+#########################################
 
 library(stringr)
 
@@ -262,7 +346,7 @@ ggplot(sum_bg_group_flood) +
 
 
 ```{r}
-sum(is.na(bg_group$census_geometry))  # should be 0
+
 ```
 
 
@@ -321,10 +405,6 @@ animate(flood_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski
 ###### join on events, flood hazard ---- determine % of events fall within and % of events fall outside flood zones... this will determine if flood zones need remapped ### /Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv
 ###### join on flood hazard, census tracts ... maybe?? 
 
-
-```{r}
-flood_events
-
 # event type
 # damage property 
 # damage crops
@@ -334,5 +414,210 @@ flood_events
 # injuries direct 
 # injuries indirect
 
+
+```{r}
+
+```
+
+# FLOOD DAMAGE PROPERTY
+
+
+```{r}
+
+# 1. Filter non-missing DAMAGE_PROPERTY
+flood_events_damage <- flood_events %>%
+  filter(!is.na(DAMAGE_PROPERTY))
+
+# 2. Convert DAMAGE_PROPERTY to numeric (handles K, M, B)
+flood_events_damage <- flood_events_damage %>%
+  mutate(
+    DAMAGE_PROPERTY_NUM = case_when(
+      str_detect(DAMAGE_PROPERTY, "K") ~ as.numeric(str_replace(DAMAGE_PROPERTY, "K", "")) * 1e3,
+      str_detect(DAMAGE_PROPERTY, "M") ~ as.numeric(str_replace(DAMAGE_PROPERTY, "M", "")) * 1e6,
+      str_detect(DAMAGE_PROPERTY, "B") ~ as.numeric(str_replace(DAMAGE_PROPERTY, "B", "")) * 1e9,
+      TRUE ~ as.numeric(DAMAGE_PROPERTY)
+    )
+  )
+
+# 3. Group and summarize, then remove zero-damage geometries
+flood_events_damage_group <- flood_events_damage %>%
+  group_by(GIDBG, census_geometry) %>%
+  summarise(sumtotal_damage = sum(DAMAGE_PROPERTY_NUM, na.rm = TRUE), .groups = "drop") %>%
+  filter(sumtotal_damage > 0)  # <- remove zeros
+
+# 4. Sort descending by damage
+flood_events_damage_group <- flood_events_damage_group %>%
+  arrange(desc(sumtotal_damage))
+
+ggplot(flood_events_damage_group) +
+  geom_sf(aes(fill = sumtotal_damage), color = NA, size = 10) +
+  scale_fill_viridis_c(option = "plasma", name = "Damage Totals") +
+  labs(
+    title = "Total Property Damage per Block Group",
+    subtitle = "GIDBG-level Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal()
+
+
+
+
+```
+# Flood Damage Crops 
+
+
+```{r}
+
+# 1. Filter non-missing DAMAGE_CROPS
+flood_events_crop <- flood_events %>%
+  filter(!is.na(DAMAGE_CROPS))
+
+# 2. Convert DAMAGE_CROPS to numeric
+flood_events_crop <- flood_events_crop %>%
+  mutate(
+    DAMAGE_CROPS_NUM = case_when(
+      str_detect(DAMAGE_CROPS, "K") ~ as.numeric(str_replace(DAMAGE_CROPS, "K", "")) * 1e3,
+      str_detect(DAMAGE_CROPS, "M") ~ as.numeric(str_replace(DAMAGE_CROPS, "M", "")) * 1e6,
+      str_detect(DAMAGE_CROPS, "B") ~ as.numeric(str_replace(DAMAGE_CROPS, "B", "")) * 1e9,
+      TRUE ~ as.numeric(DAMAGE_CROPS)
+    )
+  )
+
+# 3. Group by GIDBG and census_geometry, summarize total crop damage, remove zeros
+flood_events_crop_group <- flood_events_crop %>%
+  group_by(GIDBG, census_geometry) %>%
+  summarise(sumtotal_crop_damage = sum(DAMAGE_CROPS_NUM, na.rm = TRUE), .groups = "drop") %>%
+  filter(sumtotal_crop_damage > 0)
+
+# 4. Sort descending
+flood_events_crop_group <- flood_events_crop_group %>%
+  arrange(desc(sumtotal_crop_damage))
+
+ggplot(flood_events_crop_group) +
+  geom_sf(aes(fill = sumtotal_crop_damage), color = NA, size = 0.1) +
+  scale_fill_viridis_c(option = "plasma", name = "Crop Damage Totals") +
+  labs(
+    title = "Total Crop Damage per Block Group",
+    subtitle = "GIDBG-level Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal()
+
+
+```
+# Magnitude
+
+
+```{r}
+
+# 1. Filter non-missing MAGNITUDE
+flood_events_mag <- flood_events %>%
+  filter(!is.na(MAGNITUDE))
+
+# 2. Group and summarize average magnitude
+flood_events_mag_group <- flood_events_mag %>%
+  group_by(GIDBG, census_geometry) %>%
+  summarise(avg_magnitude = mean(MAGNITUDE, na.rm = TRUE), .groups = "drop") %>%
+  filter(avg_magnitude > 0)
+
+# 3. Sort descending
+flood_events_mag_group <- flood_events_mag_group %>%
+  arrange(desc(avg_magnitude))
+
+ggplot(flood_events_mag_group) +
+  geom_sf(aes(fill = avg_magnitude), color = NA, size = 0.1) +
+  scale_fill_viridis_c(option = "plasma", name = "Avg. Magnitude") +
+  labs(
+    title = "Average Event Magnitude per Block Group",
+    subtitle = "GIDBG-level Choropleth",
+    caption = "Data Source: Your Project"
+  ) +
+  theme_minimal()
+```
+# Injuries and Deaths
+
+```{r}
+
+flood_events
+
+```
+
+# Summary Tables Total Events
+
+```{r}
+
+library(dplyr)
+
+# Grouping by full granularity: state, county, tract, block group
+total_events_block <- census_stormdata %>%
+  group_by(STATE_MAPPED, attributes.STATE, County_Name, attributes.COUNTY, attributes.TRACT, attributes.BLKGRP) %>%
+  summarise(total_event_count_per_block = n(), .groups = "drop") %>%
+  arrange(desc(total_event_count_per_block))
+
+# Grouping by tract
+total_events_tracks <- census_stormdata %>%
+  group_by(STATE_MAPPED, attributes.STATE, County_Name, attributes.COUNTY, attributes.TRACT) %>%
+  summarise(total_event_count_per_tract = n(), .groups = "drop") %>%
+  arrange(desc(total_event_count_per_tract))
+
+# Grouping by county
+total_events_county <- census_stormdata %>%
+  group_by(STATE_MAPPED, attributes.STATE, County_Name, attributes.COUNTY) %>%
+  summarise(total_event_count_per_county = n(), .groups = "drop") %>%
+  arrange(desc(total_event_count_per_county))
+
+# Grouping by state only
+total_events_state <- census_stormdata %>%
+  group_by(STATE_MAPPED, attributes.STATE) %>%
+  summarise(total_event_count_per_state = n(), .groups = "drop") %>%
+  arrange(desc(total_event_count_per_state))
+
+total_events_block
+total_events_tracks
+total_events_county
+total_events_state
+
+
+```
+
+
+# Summary Table Flood Events
+
+```{r}
+library(dplyr)
+
+# Block group level (STATE, COUNTY, TRACT, BLOCK GROUP)
+flood_events_blocks <- flood_events %>%
+  group_by(STATE_MAPPED, attributes.STATE, County_Name, attributes.COUNTY, attributes.TRACT, attributes.BLKGRP) %>%
+  summarise(`Flood Event Count Per Block Group` = n(), .groups = "drop") %>%
+  arrange(desc(`Flood Event Count Per Block Group`))
+
+# Tract level (STATE, COUNTY, TRACT)
+flood_events_tracts <- flood_events %>%
+  group_by(STATE_MAPPED, attributes.STATE, County_Name, attributes.COUNTY, attributes.TRACT) %>%
+  summarise(`Flood Event Count per Tract` = n(), .groups = "drop") %>%
+  arrange(desc(`Flood Event Count per Tract`))
+
+# County level (STATE, COUNTY)
+flood_events_counties <- flood_events %>%
+  group_by(STATE_MAPPED, attributes.STATE, County_Name, attributes.COUNTY) %>%
+  summarise(`Flood Event Count per County` = n(), .groups = "drop") %>%
+  arrange(desc(`Flood Event Count per County`))
+
+# State level (STATE)
+flood_events_states <- flood_events %>%
+  group_by(STATE_MAPPED, attributes.STATE) %>%
+  summarise(`Flood Event Count per State` = n(), .groups = "drop") %>%
+  arrange(desc(`Flood Event Count per State`))
+
+flood_events_blocks
+flood_events_tracts
+flood_events_counties
+flood_events_states
+```
+
+
+```{r}
+census_stormdata
 ```
 
