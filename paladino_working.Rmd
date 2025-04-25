@@ -192,7 +192,7 @@ ggplot(county_group, aes(x = YEAR, y = event_count, color = county_code, group =
 ggplot(county_group_flood, aes(x = YEAR, y = event_count, color = county_code, group = county_code)) +
   geom_line() +
   geom_point() +
-  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  labs(title = "Event Count by County", x = "Year", y = "Event Count") +
   theme_minimal() +
   theme(
     legend.position = "bottom",
@@ -222,7 +222,7 @@ ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)
 ggplot(state_group_flood, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
   geom_line() +
   geom_point() +
-  labs(title = "Event Count by Tract", x = "Year", y = "Event Count") +
+  labs(title = "Event Count by State", x = "Year", y = "Event Count") +
   theme_minimal() +
   theme(
     legend.position = "bottom",
@@ -282,6 +282,7 @@ library(sf)
 
 
 all_events_ani <- ggplot(bg_group) +
+  geom_sf(data = bg_total_geo, fill = NA, color = "white", size = 0.2) +  # <- outline layer
   geom_sf(aes(fill = event_count), color = NA) +
   scale_fill_viridis_c(option = "plasma", name = "Event Count") +
   labs(
@@ -295,10 +296,11 @@ all_events_ani <- ggplot(bg_group) +
 
 
 flood_events_ani <- ggplot(bg_group_flood) +
+  geom_sf(data = bg_total_geo, fill = NA, color = "grey", size = 0.05) +  # <- outline layer
   geom_sf(aes(fill = event_count), color = NA) +
   scale_fill_viridis_c(option = "plasma", name = "Event Count") +
   labs(
-    title = 'Event Count by Block Group — Year: {current_frame}',
+    title = 'Flood Event Count by Block Group — Year: {current_frame}',
     subtitle = "Animated Choropleth",
     caption = "Data Source: Your Project"
   ) +
@@ -306,12 +308,11 @@ flood_events_ani <- ggplot(bg_group_flood) +
   transition_manual(frames = YEAR)
 
 
-
 ```
 
 
 ```{r}
-animate(all_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
+#animate(all_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
 animate(flood_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
 
 ```
