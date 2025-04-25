@@ -30,9 +30,10 @@ pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatial
 
 invisible(lapply(pkg_vector,loadPkg))
 
-data_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/"
-```
 
+#User needs to set their own data_dir if working directory not repo base
+data_dir <- paste0(getwd(),'/data')
+```
 
 # 1. FEMA Flood Zone Extraction
 

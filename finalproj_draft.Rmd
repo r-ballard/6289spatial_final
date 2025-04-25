@@ -17,33 +17,212 @@ devtools::install_github("physicsland/ezids")
 ```
 The above installs ezids, a package manager developed and maintained by GW DS Department.
 
+# PROJECT NAME
 
+## Frontmatter
+```{r ezidsetup,eval=FALSE}
+#https://github.com/physicsland/ezids
+if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
+install.packages ("devtools")
+devtools::install_github("physicsland/ezids")
+install.packages("ezids")
+```
+The above installs ezids, a package manager developed and maintained by GW DS Department.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 set.seed(20052)
 
-remotes::install_github("mikejohnson51/NFHL")
-remotes::install_github("mikejohnson51/AOI")
-
-
+#install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
 library(ezids)
-pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI")
+pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI", "tidycensus", "tigris","rfema","raster","stringr","xml2","rvest","httr","reader","purrr","readr","rvest","stringr","tidyr")
 
 invisible(lapply(pkg_vector,loadPkg))
 
 
+#User needs to set their own data_dir if working directory not repo base
+data_dir <- paste0(getwd(),'/data')
 ```
-
-
-
 
 # 1. FEMA Flood Zone Extraction
 
 - Extract Layer 28 polygons for the DMV region using the `NFHL` R package.
 - Filter for **Special Flood Hazard Areas (SFHA)** using the condition `SFHA_TF == "T"`.
+
+```{r createnfhldf}
+
+# FEMA NFHL base URL
+base_url <- "https://hazards.fema.gov/femaportal/NFHL/"
+target_url <- paste0(base_url, "searchResult")
+
+# Read page
+page <- read_html(target_url)
+
+# Extract all table rows
+rows <- page %>% html_nodes("tr")
+
+# Parse each row into fields: FIRMID, County, State, Date, Size, Link
+nfhl_df <- rows %>%
+  map_df(~{
+    tds <- .x %>% html_nodes("td")
+    if (length(tds) < 6) return(NULL)  # skip malformed rows
+
+    list(
+      dfirm_id = tds[1] %>% html_text(trim = TRUE),
+      county = tds[2] %>% html_text(trim = TRUE),
+      state = tds[3] %>% html_text(trim = TRUE),
+      effective_date = tds[4] %>% html_text(trim = TRUE),
+      file_size = tds[5] %>% html_text(trim = TRUE),
+      url = tds[6] %>% html_node("a") %>% html_attr("href") %>% paste0(base_url, .)
+    )
+  }) %>%
+  filter(str_detect(dfirm_id, "^(11|24|51).*")) %>%
+  mutate(url = URLencode(url, reserved = TRUE))
+
+# Preview
+print(head(nfhl_df))
+
+```
+
+```{r nfhl_scrape, eval=FALSE}
+
+# Base URL and scrape target
+base_url <- "https://hazards.fema.gov/femaportal/NFHL/"
+target_url <- paste0(base_url, "searchResult")
+
+# Read and parse HTML
+page <- read_html(target_url)
+
+# Extract all download links with their file names
+zip_links <- page %>%
+  html_nodes("a") %>%
+  html_attr("href") %>%
+  na.omit() %>%
+  str_subset("^Download/ProductsDownLoadServlet\\?DFIRMID=") %>%
+  unique()
+
+# Filter by DFIRMID prefix: 11, 24, or 51
+filtered_links <- zip_links %>%
+  str_subset("^Download/ProductsDownLoadServlet\\?DFIRMID=(11|24|51)")
+
+# Convert to full URLs
+full_urls <- paste0(base_url, filtered_links)
+full_urls <- gsub(" ", "%20", full_urls)
+
+
+# Optional: Set destination folder
+dest_dir <- "data/test/nfhl_zips"
+dir.create(dest_dir, showWarnings = FALSE)
+
+# Download function with polite wait
+download_nfhl_zip <- function(url, delay = 3) {
+  file_name <- str_extract(url, "fileName=[^&]+") %>%
+    str_remove("fileName=")
+  dest_file <- file.path(dest_dir, file_name)
+
+  if (!file.exists(dest_file)) {
+    message("Downloading: ", file_name)
+    tryCatch({
+      download.file(url, destfile = dest_file, mode = "wb")
+      Sys.sleep(delay)
+    }, error = function(e) {
+      message("Error downloading ", file_name)
+    })
+  } else {
+    message("Already downloaded: ", file_name)
+  }
+}
+
+# Loop and download
+walk(full_urls, download_nfhl_zip)
+
+```
+
+The above codeblock scrapes FEMA's NFHL DFIRM6 catalog. Only needs to be run if shapefile zips are not currently in user data directory.
+
+```{r create_geoidpivot, eval=FALSE}
+
+library(sf)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(purrr)
+
+# Directory containing your zip files
+zip_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test/nfhl_zips"
+
+# List of zip files (assuming they start with 5-digit GEOID prefix)
+zip_files <- list.files(zip_dir, pattern = "^\\d{5}.*\\.zip$", full.names = TRUE)
+
+# Initialize output data frame
+outputs <- tibble(GEOID = character(), FLD_ZONE = character(), COUNT = integer())
+
+# Loop through each zip file
+for (zip_path in zip_files) {
+  # Extract the 5-digit GEOID from the filename
+  geoid <- str_extract(basename(zip_path), "^\\d{5}")
+
+  # Create temporary directory for extraction
+  temp_dir <- tempfile(pattern = "nfhl_")
+  dir.create(temp_dir)
+
+  # Extract contents
+  unzip(zip_path, exdir = temp_dir)
+
+  # Look for the S_FLD_HAZ_AR.shp shapefile
+  shp_files <- list.files(temp_dir, pattern = "S_FLD_HAZ_AR\\.shp$", recursive = TRUE, full.names = TRUE)
+  if (length(shp_files) == 0) {
+    message(glue::glue("No shapefile found in {zip_path}, skipping."))
+    unlink(temp_dir, recursive = TRUE)
+    next
+  }
+
+  # Load shapefile
+  flood_layer <- tryCatch({
+    st_read(shp_files[1], quiet = TRUE)
+  }, error = function(e) {
+    message(glue::glue("Failed to read shapefile in {zip_path}, skipping."))
+    unlink(temp_dir, recursive = TRUE)
+    return(NULL)
+  })
+
+  if (is.null(flood_layer)) next
+
+  Summarize FLD_ZONE counts
+  pivot <- flood_layer %>%
+    st_drop_geometry() %>%
+    count(FLD_ZONE, name = "COUNT") %>%
+    mutate(GEOID = geoid) %>%
+    dplyr::select(GEOID, FLD_ZONE, COUNT)
+  
+
+  # Append to outputs
+  outputs <- bind_rows(outputs, pivot)
+
+  
+  # Cleanup
+  unlink(temp_dir, recursive = TRUE)
+}
+
+
+
+```
+
+```{r write_geoidoutputs, eval=FALSE}
+write.csv(outputs, file = "data/outputs.csv", row.names = FALSE)
+```
+
+The above codeblock writes the resultant parsed geoid dataframe to the user data directory. Should only be run if the above codeblock transforming the shapefiles is run.
+
+
+```{r load_outputs}
+outputs <- read_csv("data/outputs.csv", col_types = cols(.default = "c"))
+```
+
+The above codeblock reads the parsed geoid dataframe to the user data directory.
+
 
 # 2. NOAA Flood Event Collection
 
@@ -51,17 +230,368 @@ invisible(lapply(pkg_vector,loadPkg))
   - Flood
   - Flash Flood
   - Coastal Flood
+
+```{r noaa_bulkdatadownload, eval=FALSE}
+#This code chunk will download all the NOAA event data so don't run if data is already present in environment.
+
+# Base URL of the directory
+base_url <- "https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/"
+
+# Read the HTML content of the directory listing
+page <- read_html(base_url)
+
+# Extract all links to .csv.gz files
+file_links <- page %>%
+  html_nodes("a") %>%
+  html_attr("href") %>%
+  na.omit() %>%
+  str_subset("\\.csv\\.gz$")
+
+# Make full URLs
+full_urls <- paste0(base_url, file_links)
+
+# Download folder (you can change this)
+download_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test"
+dir.create(download_dir, showWarnings = FALSE)
+
+# Loop to download with delays
+for (url in full_urls) {
+  file_name <- basename(url)
+  dest_path <- file.path(download_dir, file_name)
+  
+  message("Downloading: ", file_name)
+  tryCatch({
+    download.file(url, destfile = dest_path, mode = "wb")
+  }, error = function(e) {
+    warning("Failed to download ", file_name, ": ", conditionMessage(e))
+  })
+  
+  # Wait a few seconds to avoid hammering the server
+  Sys.sleep(runif(1, 2, 5))  # random wait between 2 and 5 seconds
+}
+
+```
+
+The above code chunk downloads NOAA Event Details for 1950-2024. It should only be run if data is not already present in development environment.
+
+```{r noaa_rowjoin}
+#rowwise joins of event details, fatalities, and locations
+
+
+files <- list.files(data_dir, pattern = "\\.csv\\.gz$", full.names = TRUE)
+
+details_files <- files[grepl("StormEvents_details", files)]
+locations_files <- files[grepl("StormEvents_locations", files)]
+fatalities_files <- files[grepl("StormEvents_fatalities", files)]
+
+read_as_character <- function(file) {
+  df <- read_csv(file, col_types = cols(.default = col_character()), show_col_types = FALSE)
+  df$filename <- basename(file)
+  df
+}
+
+# Combine all details files
+storm_details_df <- map_dfr(details_files, read_as_character)
+
+# Combine all locations files
+storm_locations_df <- map_dfr(locations_files, read_as_character)
+
+# Combine all fatalities files
+storm_fatalities_df <- map_dfr(fatalities_files, read_as_character)
+
+head(storm_details_df)
+
+```
+
+The above code chunk reads in and conducts a rowwise join of the annual NOAA event tables 
+
+```{r noaa_tablewrite, eval=FALSE}
+#writes processed table
+
+write_pipe_csv_gz <- function(df, output_dir, filename) {
+  # Ensure the output directory exists
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  # Construct full path
+  file_path <- file.path(output_dir, paste0(filename, ".csv.gz"))
+  
+  # Write the compressed, pipe-delimited file
+  readr::write_delim(
+    df,
+    file = file_path,
+    delim = "|",
+    col_names = TRUE
+  )
+  
+  message("File written to: ", file_path)
+}
+
+write_pipe_csv_gz(storm_details_dmv, data_dir, "storm_details_dmv")
+```
+
+The above chunk will write the joined noaa event details table to data_dir. Only needs to be run if a new table of noaa events has been downloaded.
+
+
+```{r noaa_tableload}
+#will read the filtered storm_details_dmv.csv.gz saved to your repo data directory from GDrive
+
+data_dir = "C:/Users/russe/Documents/github/6289spatial_final/data"
+
+read_pipe_csv_gz <- function(input_dir, filename) {
+  file_path <- file.path(input_dir, paste0(filename, ".csv.gz"))
+  
+  df <- readr::read_delim(
+    file = file_path,
+    delim = "|",
+    col_names = TRUE,
+    show_col_types = FALSE,
+  col_types = cols(.default = col_character())
+  )
+  
+  return(df)
+}
+
+storm_details_df <- as_tibble(read_pipe_csv_gz(data_dir, "storm_details_dmv"))
+```
+
+The above code chunk can be used to load a previously saved noaa event details .csv.gz to proceed with processing.
+
+```{r noaa_detailsfilter}
+#filters event details to include only DC, MD, VA state fips codes
+storm_details_df <- storm_details_df %>%
+  filter(STATE_FIPS %in% c("11", #DC
+                           "24", #MD
+                           "51"  #VA
+                           ))
+
+storm_details_df <- storm_details_df %>%
+  filter(EVENT_TYPE %in% c('Flash Flood',
+                           'Flood',
+                           'Coastal Flood'
+                           ))
+```
+
+The above code chunk filters the events data to include only STATE_FIPS for DC/MD/VA and to only include EVENT_TYPES of Coastal Flood, Flash Flood, or Flood.
+
+
 - Extract:
   - Geolocation
   - Event date
   - Event type
   - Damage estimates
 
+```{r noaatablesubset}
+
+storm_details_df <- storm_details_df %>%
+  dplyr::select("EVENT_ID",
+                "BEGIN_YEARMONTH",
+                "BEGIN_DAY",
+                "BEGIN_TIME",
+                "STATE",
+                "STATE_FIPS",
+                "YEAR",
+                "MONTH_NAME",
+                "EVENT_TYPE",
+                "CZ_FIPS",
+                "CZ_NAME",
+                "BEGIN_DATE_TIME",
+                "INJURIES_DIRECT",
+                "INJURIES_INDIRECT",
+                "DEATHS_DIRECT",
+                "DEATHS_INDIRECT",
+                "DAMAGE_PROPERTY",
+                "DAMAGE_CROPS",
+                "FLOOD_CAUSE",
+                "BEGIN_LOCATION",
+                "BEGIN_LAT",
+                "BEGIN_LON"
+)
+
+
+```
+
+The above codeblock subsets NOAA-NWS event details to include only fields germane to our analysis.
+
+
+```{r noaaevents_cleaning}
+storm_details_df <- storm_details_df %>%
+  mutate(
+    DAMAGE_CROPS_CLEAN = case_when(
+      str_detect(DAMAGE_CROPS, regex("^[0-9.]+K$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_CROPS, regex("K", ignore_case = TRUE))) * 1e3,
+      str_detect(DAMAGE_CROPS, regex("^[0-9.]+M$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_CROPS, regex("M", ignore_case = TRUE))) * 1e6,
+      str_detect(DAMAGE_CROPS, "^[0-9.]+$") ~
+        as.numeric(DAMAGE_CROPS),
+      TRUE ~ NA_real_
+    )
+  )
+
+storm_details_df <- storm_details_df %>%
+  mutate(
+    DAMAGE_PROPERTY_CLEAN = case_when(
+      str_detect(DAMAGE_PROPERTY, regex("^[0-9.]+K$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_PROPERTY, regex("K", ignore_case = TRUE))) * 1e3,
+      str_detect(DAMAGE_PROPERTY, regex("^[0-9.]+M$", ignore_case = TRUE)) ~
+        as.numeric(str_remove(DAMAGE_PROPERTY, regex("M", ignore_case = TRUE))) * 1e6,
+      str_detect(DAMAGE_PROPERTY, "^[0-9.]+$") ~
+        as.numeric(DAMAGE_PROPERTY),
+      TRUE ~ NA_real_
+    )
+  )
+
+
+storm_details_df <- storm_details_df %>%
+  mutate(across(c(INJURIES_DIRECT, INJURIES_INDIRECT, DEATHS_DIRECT, DEATHS_INDIRECT), as.numeric))
+
+
+storm_details_df <- storm_details_df %>%
+  mutate(
+    FIPS5 = paste0(STATE_FIPS, str_pad(CZ_FIPS, width = 3, pad = "0"))
+  )
+
+storm_details_df <- storm_details_df %>%
+  mutate(
+    TOTAL_DAMAGE = DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN
+  )
+```
+
+There are certain fields within the event details data which need cleaning. For example, FIPS county (`CZ_FIPS`) is not left padded, and `DAMAGE_PROPERTY` and `DAMAGE_CROPS` have string scalars that need to be handled.s
+
 # 3. Spatial Join and Aggregation
 
 - Assign events to spatial units:
   - Census tracts or
   - ZIP Code Tabulation Areas (ZCTAs)
+  
+```{r constructlinktable}
+library(tigris)
+library(dplyr)
+
+# Get all U.S. counties (this pulls GEOID, NAME, STATEFP, COUNTYFP)
+county_sf <- counties(cb = TRUE, year = 2023)
+
+# Just keep needed fields and convert to character
+fips_df <- county_sf %>%
+  st_drop_geometry() %>%
+  transmute(
+    NAME,
+    STATEFP,
+    COUNTYFP,
+    FIPS5 = paste0(STATEFP, COUNTYFP),
+    GEOID = GEOID  # This should match FIPS5 normally
+  )
+
+# Your FEMA output GEOIDs (e.g., from the earlier script)
+fema_geoids <- outputs %>%
+  distinct(GEOID) %>%
+  pull()
+
+# Identify GEOIDs that are in FEMA data but not in official FIPS5
+fema_geoids_df <- tibble(FEMA_GEOID = fema_geoids)
+
+lookup_table <- fema_geoids_df %>%
+  anti_join(fips_df, by = c("FEMA_GEOID" = "FIPS5"))
+
+manual_fixes <- tibble(
+  FEMA_DFIRM = c("11000", #DC City
+                 "24000", #Baltimore City
+                 "51002", #Bristol City
+                 "51004", #Cumberland County, there are two shapefile sets for this data, also exists as 51049, fips 51049
+                 "51006", #Franklin City
+                 "51008", #City of Hopewell
+                 "51010", #City of Norfolk
+                 "51012", #City of Radford
+                 "51018", # City of Poquoson
+                 "51551", # City of Alexandria),
+                 "51540"), #City of Charlottesville
+  FIPS5 = c("11001", #DC City
+            "24005", #Baltimore City
+            "51502", #Bristol City
+            "51049", #Cumberland County
+            "51620", #Franklin City
+            "51670", #City of Hopewell
+            "51710 ", #City of Norfolk
+            "51750", #City of Radford
+            "51735", #City of Poquoson
+            "51510", #City of Alexandria
+            "51003"
+            ))
+
+```
+
+This link table creates logic to conduct a columnar merge between the FEMA NFHL data, which uses DFIRM6 as the primary key for municipality, and the NOAA events table, which uses FIPS5. This join is not wholly 1:1 and additional research could yield improved results or assist the analytics community as no standard appears to currently exist.
+
+
+```{r manualfix_nhfl}
+
+outputs2 <- outputs %>%
+  left_join(manual_fixes, by = c("GEOID" = "FEMA_DFIRM")) %>%
+  mutate(GEOID = if_else(!is.na(FIPS5), FIPS5, GEOID)) %>%
+  dplyr::select(-FIPS5)
+
+outputs2$COUNT <- as.numeric(outputs$COUNT)
+
+outputs_wide <- outputs2 %>%
+  group_by(GEOID, FLD_ZONE) %>%
+  summarise(COUNT = sum(COUNT, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(
+    names_from = FLD_ZONE,
+    values_from = COUNT,
+    values_fill = list(COUNT = 0)
+  )
+
+```
+
+Here duplicative DFIRM values are consolidated for join. This is an artifact of independent cities within counties having distinct or recoded DFIRM6 values that do not fully align with their FIPS5.
+
+```{r join_nfhlouttonoaaevent}
+
+library(dplyr)
+
+events_flood_df <- storm_details_df %>%
+  left_join(outputs_wide, by = c("FIPS5" = "GEOID"))
+
+subset_na_A <- events_flood_df %>%
+  filter(is.na(A)) %>%
+  dplyr::select(FIPS5, STATE, CZ_NAME)
+
+distinct_na_A_FIPS5 <- events_flood_df %>%
+  filter(is.na(A)) %>%
+  dplyr::select(FIPS5, STATE, CZ_NAME) %>%
+  distinct(FIPS5, .keep_all = TRUE)
+
+```
+
+Here we implement the join described above using the link table, and we extract unmatched IDs from each for exploration (which is how the manual lookup values were derived above)
+
+
+```{r write_eventsflood}
+write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
+```
+
+Joined table is written.
+
+```{r load_eventsflood}
+events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.default = "c"))
+
+events_flood_df <- events_flood_df %>%
+  mutate(
+    YEAR = as.numeric(as.character(YEAR)),
+    TOTAL_DAMAGE = as.numeric(as.character(TOTAL_DAMAGE)),
+    DAMAGE_PROPERTY_CLEAN = as.numeric(as.character(DAMAGE_PROPERTY_CLEAN)),
+    DAMAGE_CROPS_CLEAN = as.numeric(as.character(DAMAGE_CROPS_CLEAN)),
+    DEATHS_DIRECT = as.numeric(as.character(DEATHS_DIRECT)),
+    DEATHS_INDIRECT = as.numeric(as.character(DEATHS_INDIRECT)),
+    INJURIES_DIRECT = as.numeric(as.character(INJURIES_DIRECT)),
+    INJURIES_INDIRECT = as.numeric(as.character(INJURIES_INDIRECT))
+  )
+
+```
+
+Joined table is loaded and fields retyped appropriately.
+
+
 - Count flood event frequency per spatial unit.
 - Overlay flood event hotspots on FEMA SFHA zones.
 - Identify:
@@ -71,6 +601,178 @@ invisible(lapply(pkg_vector,loadPkg))
 # 4. Time Series Analysis
 
 - Aggregate flood events by decade.
+
+```{r transform_eventsflood_decadeadd}
+events_flood_df <- events_flood_df %>%
+  mutate(
+    DECADE = case_when(
+      YEAR >= 1990 & YEAR < 2000 ~ "90s",
+      YEAR >= 2000 & YEAR < 2010 ~ "00s",
+      YEAR >= 2010 & YEAR < 2020 ~ "10s",
+      YEAR >= 2020 & YEAR < 2030 ~ "2020-2024",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  mutate(
+    DECADE = factor(DECADE, levels = c("90s", "00s", "10s", "2020-2024"))
+  )
+```
+
 - Plot trends in:
   - Event frequency
   - Severity using damage amounts
+
+```{r pivot_eventsflood_fips5decade}
+
+decade_frequency_f <- events_flood_df %>%
+  group_by(FIPS5, DECADE) %>%
+  summarise(
+    UNIQUE_EVENTS = n_distinct(EVENT_ID),
+    .groups = "drop"
+  )
+
+# Summarize total damages by year and state
+decade_damage_f <- events_flood_df %>%
+  group_by(FIPS5,DECADE) %>%
+  summarise(
+    TOTAL_DAMAGE = sum(DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+decade_casualty_f <- events_flood_df %>%
+  group_by(FIPS5,DECADE) %>%
+  summarise(
+    TOTAL_CASUALTIES = sum(
+      DEATHS_DIRECT + DEATHS_INDIRECT + INJURIES_DIRECT + INJURIES_INDIRECT,
+      na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+Here we create pivots for FIPS5 decade totals for damage (cost), event count, and casualties.
+
+```{r pivot_eventsflood_totaldecade}
+decade_frequency_t <- events_flood_df %>%
+  group_by(DECADE) %>%
+  summarise(
+    UNIQUE_EVENTS = n_distinct(EVENT_ID),
+    .groups = "drop"
+  )
+
+decade_damage_t <- events_flood_df %>%
+  group_by(DECADE) %>%
+  summarise(
+    TOTAL_DAMAGE = sum(DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+decade_casualty_t <- events_flood_df %>%
+  group_by(DECADE) %>%
+  summarise(
+    TOTAL_CASUALTIES = sum(
+      DEATHS_DIRECT + DEATHS_INDIRECT + INJURIES_DIRECT + INJURIES_INDIRECT,
+      na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+Here we create pivots for DMV decade totals for damage (cost), event count, and casualties.
+
+```{r viz_eventsflood_decadedamage}
+dmg_fips <- ggplot(decade_damage_f, aes(x = DECADE, y = log(TOTAL_DAMAGE+1))) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Event Damage\nby FIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Log Total Flood Event Damage by FIPS5 (County)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+dmg_tot <- ggplot(decade_damage_t, aes(x = DECADE, y = log(TOTAL_DAMAGE + 1))) +
+  geom_col(fill = "#4682b4") +
+  labs(
+    title = "Total Flood Damage by Decade",
+    x = "Decade",
+    y = "Log Total Flood Damage"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+library(gridExtra)
+grid.arrange(dmg_fips, dmg_tot, ncol = 2, widths = c(1, 1))
+```
+
+In the above FIPS5 and DMV Decade Total Flood Events time series aggregations we can see that individual counties saw a drop in estimated damage (in log dollars) due to flooding in the 2000s when compared to the 1990s, however the trend is generally positive, and 2020-2024 total damage cost is already almost equivalent to the 2010s, meaning that flooding events have become more severe over time in terms of damage expenses.
+
+```{r viz_eventsflood_decadefrequency}
+
+freq_fips <- ggplot(decade_frequency_f, aes(x = DECADE, y = UNIQUE_EVENTS)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Events by\nFIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Total Flood Events by FIPS5 (County)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+freq_tot <- ggplot(decade_frequency_t, aes(x = DECADE, y = UNIQUE_EVENTS)) +
+  geom_col(fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Events by\nFIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Total Flood Events"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+grid.arrange(freq_fips, freq_tot, ncol = 2, widths = c(1, 1))
+```
+In the above FIPS5 and DMV Decade Total Flood Events time series aggregations we can see that individual counties are experiencing more frequent flooding each decade from the 90s to present, and that if the 2020s experience flooding for the remainder of the decade in line with what has already occured it will be the most flood-prone decade for the DMV of the 4 studied.
+
+```{r viz_eventsflood_decadecasualty}
+
+caus_fips <- ggplot(decade_casualty_f, aes(x = DECADE, y = TOTAL_CASUALTIES)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Casualties by\nFIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Total Flood Events by FIPS5 (County)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+caus_tot <- ggplot(decade_casualty_t, aes(x = DECADE, y = TOTAL_CASUALTIES)) +
+  geom_col(fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Casualties by Decade",
+    x = "Decade",
+    y = "Total Flood Casualties"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+grid.arrange(caus_fips, caus_tot, ncol = 2, widths = c(1, 1))
+```
+
+In the above FIPS5 and DMV Decade Total casualty time series aggregations we can see that individual counties generally do not experience casualties during flood events, with a handful experiencing 0-5 total throughout the decade, and that so far the 2020s appear to be experiencing lower casualty totals during flood events when compared to previous decades.
