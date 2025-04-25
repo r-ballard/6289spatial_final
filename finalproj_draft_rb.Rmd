@@ -74,7 +74,7 @@ print(head(nfhl_df))
 
 ```
 
-```{r nfhl_scrape}
+```{r nfhl_scrape, eval=FALSE}
 
 # Base URL and scrape target
 base_url <- "https://hazards.fema.gov/femaportal/NFHL/"
@@ -128,6 +128,7 @@ walk(full_urls, download_nfhl_zip)
 
 ```
 
+The above codeblock scrapes FEMA's NFHL DFIRM6 catalog.
 
 ```{r create_geoidpivot}
 
@@ -360,7 +361,8 @@ The above code chunk filters the events data to include only STATE_FIPS for DC/M
 ```{r noaatablesubset}
 
 storm_details_df <- storm_details_df %>%
-  dplyr::select("BEGIN_YEARMONTH",
+  dplyr::select("EVENT_ID",
+                "BEGIN_YEARMONTH",
                 "BEGIN_DAY",
                 "BEGIN_TIME",
                 "STATE",
@@ -499,7 +501,7 @@ outputs2 <- outputs %>%
   mutate(GEOID = if_else(!is.na(FIPS5), FIPS5, GEOID)) %>%
   dplyr::select(-FIPS5)
 
-outputs$COUNT <- as.numeric(outputs$COUNT)
+outputs2$COUNT <- as.numeric(outputs$COUNT)
 
 outputs_wide <- outputs2 %>%
   group_by(GEOID, FLD_ZONE) %>%
@@ -536,6 +538,18 @@ write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
 
 ```{r load_eventsflood}
 events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.default = "c"))
+
+events_flood_df <- events_flood_df %>%
+  mutate(
+    YEAR = as.numeric(as.character(YEAR)),
+    DAMAGE_PROPERTY_CLEAN = as.numeric(as.character(DAMAGE_PROPERTY_CLEAN)),
+    DAMAGE_CROPS_CLEAN = as.numeric(as.character(DAMAGE_CROPS_CLEAN)),
+    DEATHS_DIRECT = as.numeric(as.character(DEATHS_DIRECT)),
+    DEATHS_INDIRECT = as.numeric(as.character(DEATHS_INDIRECT)),
+    INJURIES_DIRECT = as.numeric(as.character(INJURIES_DIRECT)),
+    INJURIES_INDIRECT = as.numeric(as.character(INJURIES_INDIRECT))
+  )
+
 ```
 
 - Count flood event frequency per spatial unit.
@@ -547,338 +561,170 @@ events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.defaul
 # 4. Time Series Analysis
 
 - Aggregate flood events by decade.
+
+
+```{r transform_eventsflood_decadeadd}
+events_flood_df <- events_flood_df %>%
+  mutate(
+    DECADE = case_when(
+      YEAR >= 1990 & YEAR < 2000 ~ "90s",
+      YEAR >= 2000 & YEAR < 2010 ~ "00s",
+      YEAR >= 2010 & YEAR < 2020 ~ "10s",
+      YEAR >= 2020 & YEAR < 2030 ~ "2020-2024",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  mutate(
+    DECADE = factor(DECADE, levels = c("90s", "00s", "10s", "2020-2024"))
+  )
+```
+
 - Plot trends in:
   - Event frequency
   - Severity using damage amounts
 
 
-```{r noaaevents_annualdamage}
-# Summarize total damages by year and state
-annual_damage <- storm_details_df %>%
-  #filter(STATE_FIPS %in% c(11, 24, 51)) %>%
-  #group_by(STATE_FIPS, YEAR) %>%
-  group_by(YEAR) %>%
+```{r pivot_eventsflood_fips5decade}
+
+decade_frequency_f <- events_flood_df %>%
+  group_by(FIPS5, DECADE) %>%
   summarise(
-    TOTAL_DAMAGE = sum(DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN, na.rm = TRUE),
+    UNIQUE_EVENTS = n_distinct(EVENT_ID),
     .groups = "drop"
   )
 
+# Summarize total damages by year and state
+decade_damage_f <- events_flood_df %>%
+  group_by(FIPS5,DECADE) %>%
+  summarise(
+    TOTAL_DAMAGE = sum(DAMAGE_PROPERTY_CLEAN + DAMAGE_CROPS_CLEAN, na.rm = TRUE),
+    .groups = "drop")
 
-# Plot as column chart
-#ggplot(annual_damage, aes(x = YEAR, y = TOTAL_DAMAGE, fill = as.factor(STATE_FIPS))) +
-ggplot(annual_damage, aes(x = YEAR, y = TOTAL_DAMAGE)) +
-  geom_col(position = "dodge") +
-  labs(
-    title = "Annual Flood-Related Damage by State (DC, MD, VA)",
-    x = "Year",
-    y = "Total Damage (USD)",
-    fill = "STATE_FIPS"
-  ) +
-  theme_minimal() +
-  scale_y_continuous(labels = scales::dollar)
-
-#ggplot(annual_damage, aes(x = YEAR, y = log10(TOTAL_DAMAGE+1), fill = as.factor(STATE_FIPS))) +
-ggplot(annual_damage, aes(x = YEAR, y = log10(TOTAL_DAMAGE+1))) +
-  geom_col(position = "dodge") +
-  labs(
-    title = "Annual Flood-Related Damage by State (Log Scale)",
-    x = "Year",
-    y = "Log10(Total Damage in USD)",
-    fill = "STATE_FIPS"
-  ) +
-  theme_minimal()
-
-```
-
-```{r noaa_annualdamageboxplots}
-# Step 2: Aggregate by FIPS5 and YEAR
-annual_fips_damage <- storm_details_df %>%
-  group_by(FIPS5, YEAR) %>%
-  summarise(TOTAL_DAMAGE = sum(TOTAL_DAMAGE, na.rm = TRUE), .groups = "drop")
-
-# Step 3: Plot boxplots
-ggplot(annual_fips_damage, aes(x = factor(YEAR), y = TOTAL_DAMAGE)) +
-  geom_boxplot(outlier.shape = 21, fill = "lightblue") +
-  scale_y_log10(labels = scales::dollar) +  # log scale for readability
-  labs(
-    title = "Annual Distribution of Flood Damage by County (FIPS5)",
-    x = "Year",
-    y = "Total Damage (log scale)"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-
-```{r noaaevents_annualcasualty}
-
-library(dplyr)
-library(ggplot2)
-
-# Summarize total casualties by year and state
-annual_total_casualties <- storm_details_df %>%
-  #group_by(STATE_FIPS, YEAR) %>%
-  group_by( YEAR) %>%
+decade_casualty_f <- events_flood_df %>%
+  group_by(FIPS5,DECADE) %>%
   summarise(
     TOTAL_CASUALTIES = sum(
       DEATHS_DIRECT + DEATHS_INDIRECT + INJURIES_DIRECT + INJURIES_INDIRECT,
-      na.rm = TRUE
-    ),
+      na.rm = TRUE),
     .groups = "drop"
   )
 
-# Plot as a column chart
-ggplot(annual_total_casualties, aes(x = YEAR, y = TOTAL_CASUALTIES, fill = as.factor(STATE_FIPS))) +
-  geom_col(position = "dodge") +
-  labs(
-    title = "Annual Flood-Related Casualties (Deaths + Injuries) by State",
-    x = "Year",
-    y = "Total Casualties",
-    fill = "STATE_FIPS"
-  ) +
-  theme_minimal()
-
-
 ```
 
-
-### Annual Total Events By Event By Year By FIPS
-```{r annualevents}
-library(dplyr)
-library(tidyr)
-
-# 1. Extract YEAR and filter for DMV
-storm_summary <- storm_details_df %>%
-  filter(STATE_FIPS %in% c("11", "24", "51")) %>%
-  mutate(
-    YEAR = substr(BEGIN_YEARMONTH, 1, 4)
-  ) %>%
-  group_by(STATE, YEAR, EVENT_TYPE) %>%
-  summarise(total_events = n(), .groups = "drop")
-
-# 2. Pivot wider: one row per (STATE, YEAR), columns for each EVENT_TYPE
-storm_pivot <- storm_summary %>%
-  pivot_wider(
-    names_from = EVENT_TYPE,
-    values_from = total_events,
-    values_fill = 0
+```{r pivot_eventsflood_totaldecade}
+decade_frequency_t <- events_flood_df %>%
+  group_by(DECADE) %>%
+  summarise(
+    UNIQUE_EVENTS = n_distinct(EVENT_ID),
+    .groups = "drop"
   )
 
-```
+decade_damage_t <- events_flood_df %>%
+  group_by(DECADE) %>%
+  summarise(
+    UNIQUE_EVENTS = n_distinct(EVENT_ID),
+    .groups = "drop")
 
-
-```{r eventtotalviz}
-library(tidyr)
-library(dplyr)
-
-storm_long <- storm_pivot %>%
-  pivot_longer(
-    cols = -c(STATE, YEAR),
-    names_to = "EVENT_TYPE",
-    values_to = "TOTAL_EVENTS"
-  ) %>%
-  mutate(YEAR = as.integer(YEAR))
-
-library(ggplot2)
-
-ggplot(storm_long, aes(x = YEAR, y = TOTAL_EVENTS, color = EVENT_TYPE)) +
-  geom_line(size = 1) +
-  facet_wrap(~ STATE) +
-  labs(
-    title = "Storm Events Over Time by Type",
-    x = "Year",
-    y = "Number of Events",
-    color = "Event Type"
-  ) +
-  theme_minimal() +
-  theme(
-    text = element_text(size = 12),
-    legend.position = "bottom"
-  )
-
-
-```
-
-```{r statecountypivot}
-
-library(dplyr)
-
-cz_unique_count <- storm_details_df %>%
-  group_by(STATE_FIPS) %>%
-  summarise(unique_cz_fips = n_distinct(CZ_FIPS), .groups = "drop")
-
-cz_unique_count
-```
-
-
-```{r cz_fipseventboxplotbyyear}
-library(dplyr)
-library(ggplot2)
-
-# Step 1: Extract year and count events per CZ_FIPS per year
-cz_events_per_year <- storm_details_df %>%
-  mutate(YEAR = substr(BEGIN_YEARMONTH, 1, 4)) %>%
-  group_by(YEAR, CZ_FIPS, STATE_FIPS) %>%
-  summarise(total_events = n(), .groups = "drop")
-
-ggplot(cz_events_per_year, aes(x = YEAR, y = total_events)) +
-  geom_boxplot(outlier.alpha = 0.3, fill = "#69b3a2") +
-  labs(
-    title = "Distribution of Storm Events per CZ_FIPS by Year",
-    x = "Year",
-    y = "Total Events per CZ_FIPS"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    text = element_text(size = 12)
+decade_casualty_t <- events_flood_df %>%
+  group_by(DECADE) %>%
+  summarise(
+    TOTAL_CASUALTIES = sum(
+      DEATHS_DIRECT + DEATHS_INDIRECT + INJURIES_DIRECT + INJURIES_INDIRECT,
+      na.rm = TRUE),
+    .groups = "drop"
   )
 ```
 
-```{r cz_fipseventboxplotbydecade}
-library(dplyr)
 
-cz_events_per_decade <- storm_details_df %>%
-  mutate(
-    YEAR = as.integer(substr(BEGIN_YEARMONTH, 1, 4)),
-    DECADE = paste0(floor(YEAR / 10) * 10, "s")
-  ) %>%
-  group_by(DECADE, CZ_FIPS, STATE_FIPS) %>%
-  summarise(total_events = n(), .groups = "drop")
-
-
-theme_landscape <- theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(size = 18, face = "bold"),
-    axis.text.x = element_text(angle = 0),
-    legend.position = "bottom"
-  )
-
-ggplot(cz_events_per_decade, aes(x = DECADE, y = total_events)) +
+```{r viz_eventsflood_decadedamage}
+dmg_fips <- ggplot(decade_damage, aes(x = DECADE, y = log(TOTAL_DAMAGE+1))) +
   geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
   labs(
-    title = "Distribution of Storm Events per CZ_FIPS by Decade",
+    title = "Distribution of Total Flood Event Damage\nby FIPS5 (County) by Decade",
     x = "Decade",
-    y = "Total Events per CZ_FIPS"
+    y = "Log Total Flood Event Damage by FIPS5 (County)"
   ) +
-  #theme_minimal() +
-  theme_landscape +
+  theme_minimal() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     text = element_text(size = 12)
   )
 
+dmg_tot <- ggplot(decade_frequency_t, aes(x = DECADE, y = log(TOTAL_DAMAGE + 1))) +
+  geom_col(fill = "#4682b4") +
+  labs(
+    title = "Total Flood Damage by Decade",
+    x = "Decade",
+    y = "Log Total Flood Damage"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
+
+library(gridExtra)
+grid.arrange(dmg_fips, dmg_tot, ncol = 2, widths = c(1, 1))
 ```
 
+```{r viz_eventsflood_decadefrequency}
 
----
-```{r noaa_tablejoin,eval=FALSE}
-#Joining these tables introduces cartesian joins into the data this should be approached with caution and intentionality.
+freq_fips <- ggplot(decade_frequency_f, aes(x = DECADE, y = UNIQUE_EVENTS)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Events by\nFIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Total Flood Events by FIPS5 (County)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
 
-# Start by joining details and locations (left join to keep all details)
-details_locations <- left_join(
-  storm_details_df,
-  storm_locations_df,
-  by = "EVENT_ID",
-  suffix = c("_details", "_locations")
-)
+freq_tot <- ggplot(decade_frequency_t, aes(x = DECADE, y = UNIQUE_EVENTS)) +
+  geom_col(fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Events by\nFIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Total Flood Events"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
 
-is_unique <- n_distinct(details_locations$EVENT_ID) == nrow(details_locations)
-
-# Then join with fatalities
-full_storm_df <- left_join(
-  details_locations,
-  storm_fatalities_df,
-  by = "EVENT_ID",
-  suffix = c("", "_fatalities")
-)
-
-# Join with nested fatalities
-details_with_nested_fatalities <- left_join(details_locations, fatalities_nested, by = "EVENT_ID")
-
-# Join fatalities to locations
-fatalities_locations <- left_join(
-  storm_fatalities_df,
-  storm_locations_df,
-  by = "EVENT_ID",
-  suffix = c("_fatalities", "_locations")
-)
-
-full_storm_df <- left_join(
-  storm_details_df,
-  fatalities_locations,
-  by = "EVENT_ID",
-  suffix = c("_details", "_locations_fatalities")
-)
+grid.arrange(freq_fips, freq_tot, ncol = 2, widths = c(1, 1))
 ```
 
+```{r viz_eventsflood_decadecasualty}
 
-```{r construct_multipolygondf}
-library(sf)
-library(dplyr)
-library(stringr)
-library(tidyr)
-library(purrr)
+caus_fips <- ggplot(decade_casualty_f, aes(x = DECADE, y = TOTAL_CASUALTIES)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Casualties by\nFIPS5 (County) by Decade",
+    x = "Decade",
+    y = "Total Flood Events by FIPS5 (County)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
 
-# Directory containing your zip files
-zip_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test/nfhl_zips"
+caus_tot <- ggplot(decade_casualty_t, aes(x = DECADE, y = TOTAL_CASUALTIES)) +
+  geom_col(fill = "#4682b4") +
+  labs(
+    title = "Distribution of Total Flood Casualties by Decade",
+    x = "Decade",
+    y = "Total Flood Casualties"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  )
 
-# List of zip files (assuming they start with 5-digit GEOID prefix)
-zip_files <- list.files(zip_dir, pattern = "^\\d{5}.*\\.zip$", full.names = TRUE)
-
-
-
-#target_crs <- NAD83
-# Initialize output data frame
-outputs <- tibble(
-  DFIRM = character(),
-  FLD_ZONE = character(),
-  geometry = st_sfc(crs = 'NAD83')  # Initialize empty geometry column with CRS
-)
-
-# Loop through each zip file
-for (zip_path in zip_files) {
-  # Extract the 5-digit GEOID from the filename
-  geoid <- str_extract(basename(zip_path), "^\\d{5}")
-
-  # Create temporary directory for extraction
-  temp_dir <- tempfile(pattern = "nfhl_")
-  dir.create(temp_dir)
-
-  # Extract contents
-  unzip(zip_path, exdir = temp_dir)
-
-  # Look for the S_FLD_HAZ_AR.shp shapefile
-  shp_files <- list.files(temp_dir, pattern = "S_FLD_HAZ_AR\\.shp$", recursive = TRUE, full.names = TRUE)
-  if (length(shp_files) == 0) {
-    message(glue::glue("No shapefile found in {zip_path}, skipping."))
-    unlink(temp_dir, recursive = TRUE)
-    next
-  }
-
-  # Load shapefile
-  flood_layer <- tryCatch({
-    st_read(shp_files[1], quiet = TRUE)
-  }, error = function(e) {
-    message(glue::glue("Failed to read shapefile in {zip_path}, skipping."))
-    unlink(temp_dir, recursive = TRUE)
-    return(NULL)
-  })
-
-  if (is.null(flood_layer)) next
-
-  # Summarize FLD_ZONE counts
-  itertable <- flood_layer %>%
-    dplyr::select(DFIRM_ID,FLD_ZONE,geometry)
-
-  # Append to outputs
-  outputs <- bind_rows(outputs, itertable)
-
-  # Cleanup
-  unlink(temp_dir, recursive = TRUE)
-}
-
-write.csv(outputs, file = "data/geom_outputs.csv", row.names = FALSE)
+grid.arrange(freq_fips, freq_tot, ncol = 2, widths = c(1, 1))
 ```
-
-
