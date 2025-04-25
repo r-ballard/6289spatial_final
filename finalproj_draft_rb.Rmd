@@ -562,7 +562,6 @@ events_flood_df <- events_flood_df %>%
 
 - Aggregate flood events by decade.
 
-
 ```{r transform_eventsflood_decadeadd}
 events_flood_df <- events_flood_df %>%
   mutate(
@@ -582,7 +581,6 @@ events_flood_df <- events_flood_df %>%
 - Plot trends in:
   - Event frequency
   - Severity using damage amounts
-
 
 ```{r pivot_eventsflood_fips5decade}
 
