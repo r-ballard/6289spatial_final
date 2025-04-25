@@ -535,9 +535,7 @@ write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
 ```
 
 ```{r load_eventsflood}
-
 events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.default = "c"))
-
 ```
 
 - Count flood event frequency per spatial unit.
@@ -701,7 +699,6 @@ ggplot(storm_long, aes(x = YEAR, y = TOTAL_EVENTS, color = EVENT_TYPE)) +
 
 ```
 
-
 ```{r statecountypivot}
 
 library(dplyr)
@@ -814,164 +811,6 @@ full_storm_df <- left_join(
   suffix = c("_details", "_locations_fatalities")
 )
 ```
-
-
-```{r testncload, eval=FALSE}
-library("raster")
-r = raster("C:\\Users\\russe\\Downloads\\gpcp_v01r03_daily_d20101231_c20170530.nc")
-
-```
-
-```{r testnoaaload,eval=FALSE}
-df <- read.table("C:\\Users\\russe\\Downloads\\DC_Features_20140204.txt", 
-                 header = TRUE, 
-                 sep = "|",
-                 quote="",
-                 stringsAsFactors = FALSE)
-```
-
-
-
-#test flood layer extract
-
-```{r nfhlextract_test}
-
-library(sf)
-library(dplyr)
-library(tigris)    # for county boundaries
-options(tigris_use_cache = TRUE)
-library(httr)
-
-# Load county geometries for DC, MD, VA
-counties <- counties(state = c("11", "24", "51"), cb = TRUE, class = "sf")
-
-getwd()
-
-counties_df <- st_drop_geometry(counties)
-write_csv(counties_df, "data/test/counties_dc_md_va.csv")
-
-# Add WKT geometry as a new column
-counties_wkt <- counties %>%
-  mutate(geometry_wkt = st_as_text(geometry)) %>%
-  st_drop_geometry()
-
-# Write to CSV
-write_csv(counties_wkt, "data/test/counties_dc_md_va_wkt.csv")
-
-
-
-
-
-get_nfhl_by_county <- function(county_sf) {
-  if (nrow(county_sf) != 1) stop("Please pass a single county geometry.")
-
-  # Bounding box
-  bbox <- st_bbox(county_sf)
-
-  # FEMA NFHL Layer 28 API endpoint
-  url <- "https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28/query"
-
-  # Create POST body (xMin, yMin, xMax, yMax)
-  body <- list(
-    f = "geojson",
-    where = "1=1",
-    geometryType = "esriGeometryEnvelope",
-    geometry = paste0('{"xmin":', bbox["xmin"],
-                      ',"ymin":', bbox["ymin"],
-                      ',"xmax":', bbox["xmax"],
-                      ',"ymax":', bbox["ymax"],
-                      ',"spatialReference":{"wkid":4326}}'),
-    inSR = "4326",
-    spatialRel = "esriSpatialRelIntersects",
-    outFields = "*",
-    returnGeometry = "true"
-  )
-
-  # Send POST request
-  res <- POST(url, body = body, encode = "form")
-
-  if (status_code(res) == 200) {
-    temp_file <- tempfile(fileext = ".geojson")
-    writeBin(content(res, "raw"), temp_file)
-
-    tryCatch({
-      st_read(temp_file, quiet = TRUE)
-    }, error = function(e) {
-      message("Failed to parse GeoJSON for county: ", county_sf$NAME)
-      NULL
-    })
-  } else {
-    message("Request failed with status: ", status_code(res), " for county: ", county_sf$NAME)
-    NULL
-  }
-}
-
-# Test with one county (e.g., Arlington)
-arlington <- counties[counties$NAME == "Arlington", ]
-arlington_zones <- get_nfhl_by_county(arlington)
-
-
-```
-
-```{r read_singleshapefile}
-library(sf)
-library(dplyr)
-
-# Example: pick one ZIP file
-zip_path <- "data/test/nfhl_zips/24001C_20231112.zip"  # Update path to your example
-
-# Temporary folder to extract to
-extract_dir <- tempfile(pattern = "nfhl_")
-dir.create(extract_dir)
-
-# Unzip contents
-unzip(zip_path, exdir = extract_dir)
-
-# List extracted files
-extracted_files <- list.files(extract_dir, recursive = TRUE, full.names = TRUE)
-
-# Find the .shp file (or pick manually if multiple)
-shp_file <- extracted_files[grepl("\\.shp$", extracted_files, ignore.case = TRUE)]
-
-# Just for clarity: if multiple SHPs exist, pick one:
-# (Here just picking the first)
-shp_file <- shp_file[3]
-
-# Read shapefile with sf
-flood_layer <- st_read(shp_file)
-
-# Preview
-print(flood_layer)
-
-
-
-testdf <- flood_layer$FLD_ZONE
-
-
-simple_df <- flood_layer %>%
-  dplyr::select(FLD_ZONE, FLD_AR_ID) %>%
-  st_drop_geometry()
-
-simple_df %>%
-  count(FLD_ZONE, name = "count") %>%
-  arrange(desc(count))
-
-
-# flood_layer %>%
-#   count(FLD_ZONE, name = "count") %>%
-#   arrange(desc(count))
-
-missing_in_counties <- outputs %>%
-  filter(!(GEOID %in% counties_wkt$GEOID))
-
-missing_in_outputs <- counties_wkt %>%
-  filter(!(GEOID %in% outputs$GEOID))
-
-
-link_df
-```
-
-
 
 
 ```{r construct_multipolygondf}
