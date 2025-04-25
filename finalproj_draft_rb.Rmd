@@ -197,6 +197,10 @@ write.csv(outputs, file = "data/outputs.csv", row.names = FALSE)
 
 ```
 
+```{r load_outputs}
+outputs <- read_csv("data/outputs.csv", col_types = cols(.default = "c"))
+```
+
 # 2. NOAA Flood Event Collection
 
 - Download and filter NOAA flood events (1950–2023) by event type:
@@ -488,10 +492,53 @@ manual_fixes <- tibble(
 
 ```
 
-```{r writeeventsflood}
+```{r manualfix_nhfl}
+
+outputs2 <- outputs %>%
+  left_join(manual_fixes, by = c("GEOID" = "FEMA_DFIRM")) %>%
+  mutate(GEOID = if_else(!is.na(FIPS5), FIPS5, GEOID)) %>%
+  dplyr::select(-FIPS5)
+
+outputs$COUNT <- as.numeric(outputs$COUNT)
+
+outputs_wide <- outputs2 %>%
+  group_by(GEOID, FLD_ZONE) %>%
+  summarise(COUNT = sum(COUNT, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(
+    names_from = FLD_ZONE,
+    values_from = COUNT,
+    values_fill = list(COUNT = 0)
+  )
+
+```
+
+```{r join_nfhlouttonoaaevent}
+
+library(dplyr)
+
+events_flood_df <- storm_details_df %>%
+  left_join(outputs_wide, by = c("FIPS5" = "GEOID"))
+
+subset_na_A <- events_flood_df %>%
+  filter(is.na(A)) %>%
+  dplyr::select(FIPS5, STATE, CZ_NAME)
+
+distinct_na_A_FIPS5 <- events_flood_df %>%
+  filter(is.na(A)) %>%
+  dplyr::select(FIPS5, STATE, CZ_NAME) %>%
+  distinct(FIPS5, .keep_all = TRUE)
+
+```
+
+```{r write_eventsflood}
 write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
 ```
 
+```{r load_eventsflood}
+
+events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.default = "c"))
+
+```
 
 - Count flood event frequency per spatial unit.
 - Overlay flood event hotspots on FEMA SFHA zones.
@@ -866,10 +913,6 @@ arlington_zones <- get_nfhl_by_county(arlington)
 
 ```
 
-
-
-
-
 ```{r read_singleshapefile}
 library(sf)
 library(dplyr)
@@ -927,48 +970,6 @@ missing_in_outputs <- counties_wkt %>%
 
 link_df
 ```
-
-```{r manualfix_nhfl}
-outputs2 <- outputs %>%
-  left_join(manual_fixes, by = c("GEOID" = "FEMA_DFIRM")) %>%
-  mutate(GEOID = if_else(!is.na(FIPS5), FIPS5, GEOID)) %>%
-  dplyr::select(-FIPS5)
-
-outputs$COUNT <- as.numeric(outputs$COUNT)
-
-outputs_wide <- outputs2 %>%
-  group_by(GEOID, FLD_ZONE) %>%
-  summarise(COUNT = sum(COUNT, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(
-    names_from = FLD_ZONE,
-    values_from = COUNT,
-    values_fill = list(COUNT = 0)
-  )
-
-
-```
-
-```{r join_nfhlouttonoaaevent}
-
-library(dplyr)
-
-events_flood_df <- storm_details_df %>%
-  left_join(outputs_wide, by = c("FIPS5" = "GEOID"))
-
-
-subset_na_A <- events_flood_df %>%
-  filter(is.na(A)) %>%
-  dplyr::select(FIPS5, STATE, CZ_NAME)
-
-distinct_na_A_FIPS5 <- events_flood_df %>%
-  filter(is.na(A)) %>%
-  dplyr::select(FIPS5, STATE, CZ_NAME) %>%
-  distinct(FIPS5, .keep_all = TRUE)
-
-```
-
-
-
 
 
 
@@ -1042,7 +1043,3 @@ write.csv(outputs, file = "data/geom_outputs.csv", row.names = FALSE)
 ```
 
 
-
-```{r load_outputs}
-outputs <- read_csv("data/outputs.csv", col_types = cols(.default = "c"))
-```
