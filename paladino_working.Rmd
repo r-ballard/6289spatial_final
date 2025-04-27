@@ -633,7 +633,62 @@ write.csv(flood_events, "/Users/andrewpaladino/Downloads/flood_events.csv", row.
 
 
 ```{r}
+library(sf)
+library(dplyr)
+library(readr)
+library(tidyr)
 
-library(DT)
-datatable(total_events_block)
+path <- "/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv"
+flood_hazard <- read_csv(path)
+
+flood_hazard <- flood_hazard %>%
+  filter(`properties.SFHA_TF` == "T")
+
+flood_hazard <- flood_hazard %>%
+  mutate(geometry = st_as_sfc(geometry, crs = 4326))
+flood_hazard_geo <- st_as_sf(flood_hazard, crs = 4326)
+flood_hazard_geo <- flood_hazard_geo %>%
+  select(-any_of(c("index_left", "index_right")))
+flood_events <- flood_events %>%
+  select(-any_of(c("index_left", "index_right")))
+flood_events_flood_hazard <- st_join(flood_events, flood_hazard_geo, join = st_within, left = TRUE)
+
+
+flood_summary <- flood_events_flood_hazard %>%
+  group_by(GIDBG, census_geometry) %>%
+  summarise(
+    total_flood_events = n(),
+    unique_flood_zones = n_distinct(`properties.DFIRM_ID`, na.rm = TRUE),
+    unique_zone_types = list(unique(na.omit(`properties.FLD_ZONE`))),
+    unique_flooding_risk_types = list(unique(na.omit(`properties.esri_symbology`))),
+    .groups = "drop"
+  )
+
+
+flood_summary_gdf <- st_as_sf(flood_summary, crs = 4326)
+flood_hazard_geo_proj <- st_transform(flood_hazard_geo, crs = 6933)
+flood_summary_gdf_proj <- st_transform(flood_summary_gdf, crs = 6933)
+flood_hazard_clipped <- st_intersection(
+  flood_hazard_geo_proj, 
+  st_geometry(flood_summary_gdf_proj)  # <- THIS IS THE KEY 🔥
+)
+flood_hazard_clipped <- st_sf(flood_hazard_clipped) %>%
+  mutate(clipped_area = st_area(geometry))
+flood_hazard_clipped <- st_join(flood_hazard_clipped, flood_summary_gdf_proj, join = st_within, left = TRUE)
+
+
+flood_zone_area_summary <- flood_hazard_clipped %>%
+  st_drop_geometry() %>%      # <- THIS FIXES IT: remove sf before joining
+  group_by(GIDBG) %>%
+  summarise(total_flood_zone_area = sum(clipped_area, na.rm = TRUE), .groups = "drop")
+
+final_summary <- flood_summary_gdf %>%
+  left_join(flood_zone_area_summary, by = "GIDBG") %>%
+  mutate(total_flood_zone_area = replace_na(total_flood_zone_area, units::set_units(0, "m^2")))
+
 ```
+```{r}
+final_summary
+```
+
+
