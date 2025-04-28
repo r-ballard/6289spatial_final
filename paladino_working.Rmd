@@ -1,5 +1,7 @@
 Yo !
 
+
+# Block Group. Enrichment
 ```{r}
 
 library(sf)
@@ -199,6 +201,99 @@ state_group_flood <- flood_events %>%
 
 
 ```
+
+# County Enrichment 
+
+```{r}
+
+
+
+library(dplyr)
+library(readr)
+library(sf)
+library(stringr)
+
+
+dc_counties <- read_csv('/Users/andrewpaladino/Downloads/dc_counties.csv') %>%
+  mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
+va_counties <- read_csv('/Users/andrewpaladino/Downloads/virginia_counties.csv') %>%
+  mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
+md_counties <- read_csv('/Users/andrewpaladino/Downloads/md_counties.csv') %>%
+  mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
+
+
+county_total <- bind_rows(dc_counties, va_counties, md_counties) %>%
+  mutate(geometry = st_as_sfc(geometry, crs = 4326))
+
+county_total_geo <- st_as_sf(county_total, crs = 4326)
+county_total_geo$census_geometry <- county_total_geo$geometry
+county_stormdata <- st_join(storm_data_geo, county_total_geo, join = st_within)
+
+
+flood_keywords <- c("flood", "flash flood", "flooding", "coastal flood")
+pattern <- str_c(flood_keywords, collapse = "|")  
+
+flood_events_county <- county_stormdata %>%
+  filter(
+    str_detect(EVENT_TYPE, regex(pattern, ignore_case = TRUE)) |
+    str_detect(EPISODE_NARRATIVE, regex(pattern, ignore_case = TRUE)) |
+    str_detect(EVENT_NARRATIVE, regex(pattern, ignore_case = TRUE))
+  )
+
+flood_events_county_group <- flood_events_county %>%
+  group_by(attributes.NAME, census_geometry) %>%
+  summarise(total_events = n(), .groups = "drop") %>%
+  arrange(desc(total_events))
+
+# 6. Save to CSV if needed
+# write_csv(flood_events_county_group, "county_flood_events.csv")
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(sf)
+library(dplyr)
+
+# Create the map
+flood_map <- ggplot(flood_events_county_group) +
+  geom_sf(aes(fill = total_events), color = "white", size = 0.2) +  # thinner county borders
+  geom_sf_text(aes(label = attributes.NAME), size = 2.5, color = "white") +  # smaller font for county names
+  scale_fill_viridis_c(option = "plasma", name = "Total Flood Events") +
+  labs(
+    title = "Total Flood Events by County",
+    subtitle = "DMV Area",
+    caption = "Source: Storm Data + Census Blockgroups"
+  ) +
+  theme_minimal(base_size = 10) +  # overall smaller base font
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    legend.position = "right",
+    panel.grid.major = element_line(color = "grey90", linetype = "dotted")
+  ) +
+  coord_sf(datum = NA)
+
+# Display
+print(flood_map)
+
+# Optional: Save the plot MUCH bigger
+ggsave("/Users/andrewpaladino/Downloads/flood_events_county_map.png", plot = flood_map, width = 20, height = 15, dpi = 300)  # huge plot
+
+```
+
+
+
+
+
+
+
+
+
+
+
 
 # PLOTS
 
