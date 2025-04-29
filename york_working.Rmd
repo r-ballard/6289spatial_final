@@ -14,7 +14,7 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r geodc}
+```{r load_floods}
 library(dplyr)
 library(ggplot2)
 library(ggbreak)
@@ -30,6 +30,7 @@ library(leaflet.extras)
 library(htmltools)
 library(htmlwidgets)
 library(tidyr)
+library(shiny)
 
 # Load in NOAA flood data
 floods <- read.csv("/Users/marleeyork/6289spatial_final/data/events_flood_df.csv")
@@ -49,7 +50,7 @@ x_max <- max(data$year + 1)
 ```
 
 Loading in the flood zones for DC, MD, and VA.
-```{r geodc}
+```{r load_zones}
 # Load in the flood zones
 flood_zones <- read.csv("/Users/marleeyork/6289spatial_final/data/flood_insurance_hazard_all.csv")
 
@@ -87,9 +88,9 @@ flood_zones_fixed <- st_make_valid(flood_zones)
 
 Joining flood zones and points to see if events are in the zone.
 
-```{r geodc}
+```{r checking_zone}
 # Create new column to indicate whether its in the flood zone or not
-MD_floods_with_zones <- st_join(flood_points_sf, flood_zones_fixed, join = st_intersects, left = TRUE)
+floods_with_zones <- st_join(flood_points_sf, flood_zones_fixed, join = st_intersects, left = TRUE)
 floods_with_zones_fixed <- st_make_valid(floods_with_zones)
 
 # Assign flood zone status
@@ -97,7 +98,7 @@ floods_with_zones_fixed$in_flood_zone <- floods_with_zones$properties.FLD_ZONE %
 ```
 
 Now calculating the flood counts in each zone.
-```{r geodc}
+```{r floodcounts_per_zone}
 # First, add polygon identifiers to each flood zone
 flood_zones_fixed <- flood_zones_fixed %>%
   mutate(polygon_id = paste0("polygon_", row_number()))
@@ -143,7 +144,7 @@ flood_zones_stats <- flood_zones_fixed %>%
   )
 ```
 
-```{r geodc}
+```{r dc_mis_map}
 # Create zone labels
 zone_labels <- c("In" = "Zone AE/A (Minimal Risk)", "Out" = "Zone X (Moderate Risk)")
 
@@ -476,9 +477,80 @@ js_code_combined <- paste(js_code, js_code_layers, sep = "\n\n")
 
 # Render the map with the combined JavaScript
 map_with_js <- htmlwidgets::onRender(m, js_code_combined)
-
+map_with_js
 ```
 
-```{r geodc}
-map_with_js
+Now creating the timeseries of events across the DMV.
+
+```{r timeseries_plot}
+ui <- fluidPage(
+  titlePanel("Flood Events by Year"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("selected_year", "Select Year:",
+                  min = min(floods_with_zones_fixed$year, na.rm = TRUE),
+                  max = max(floods_with_zones_fixed$year, na.rm = TRUE),
+                  value = min(floods_with_zones_fixed$year, na.rm = TRUE),
+                  sep = "", step = 1,
+                  animate = animationOptions(interval = 1500, loop = TRUE)),
+      
+      # Summary box
+      uiOutput("year_summary")
+    ),
+    
+    mainPanel(
+      leafletOutput("flood_map", height = 600)
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  
+  filtered_data <- reactive({
+    floods_with_zones_fixed %>%
+      filter(year == input$selected_year)
+  })
+  
+  output$flood_map <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles(providers$CartoDB.Positron)
+  })
+  
+  observe({
+    leafletProxy("flood_map", data = filtered_data()) %>%
+      clearMarkers() %>%
+      addCircleMarkers(
+        radius = 5,
+        stroke = TRUE,
+        weight = 1,
+        color = ~ifelse(in_flood_zone, "red", "black"),
+        fillOpacity = 0.8,
+        popup = ~paste0(
+          "<strong>Year:</strong> ", year, "<br/>",
+          "<strong>Event Type:</strong> ", event_type, "<br/>",
+          "<strong>In FEMA Flood Zone?</strong> ", ifelse(in_flood_zone, "Yes", "No")
+        )
+      )
+  })
+  
+  output$year_summary <- renderUI({
+    data <- filtered_data()
+    total_events <- nrow(data)
+    events_in_zone <- sum(data$in_flood_zone, na.rm = TRUE)
+    events_outside_zone <- sum(!data$in_flood_zone, na.rm = TRUE)
+    percent_in_zone <- ifelse(total_events > 0, round(100 * events_in_zone / total_events, 1), 0)
+    
+    HTML(paste0(
+      "<div style='margin-top: 15px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 5px;'>",
+      "<strong>Summary for ", input$selected_year, ":</strong><br/>",
+      "Total Events: ", total_events, "<br/>",
+      "In Flood Zone: ", events_in_zone, " (", percent_in_zone, "%)<br/>",
+      "Outside Flood Zone: ", events_outside_zone,
+      "</div>"
+    ))
+  })
+}
+
+shinyApp(ui, server)
 ```
