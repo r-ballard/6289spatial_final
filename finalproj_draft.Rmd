@@ -37,7 +37,11 @@ set.seed(20052)
 #install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
 library(ezids)
-pkg_vector <- c("sf", "dplyr", "tmap", "terra", "NFHL", "exactextractr","spatialreg", "broom", "ggplot2","lmtest", "sf", "spData","spdep", "sphet", "INLA","NFHL","AOI", "tidycensus", "tigris","rfema","raster","stringr","xml2","rvest","httr","reader","purrr","readr","rvest","stringr","tidyr")
+pkg_vector <- c("AOI","INLA","NFHL","broom","dplyr","exactextractr","ggbreak",
+                "ggplot2","htmltools","htmlwidgets","httr","leaflet",
+                "leaflet.extras","lmtest","purrr","raster","readr","reader",
+                "rfema","rvest","sf","spData","spdep","spatialreg","sphet",
+                "stringr","terra","tigris","tidycensus","tidyr","tmap","xml2")
 
 invisible(lapply(pkg_vector,loadPkg))
 
