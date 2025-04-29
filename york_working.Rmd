@@ -85,21 +85,6 @@ validity <- st_is_valid(flood_zones)
 flood_zones_fixed <- st_make_valid(flood_zones)
 ```
 
-Adding the state boundaries to separate plots by state. Might not need this.
-```{r geodc}
-# Download tracts for VA
-va_tracts <- read.csv("block_groups_va.csv")
-
-# Convert WKT (Well-Known Text) POLYGON strings to sf objects
-va_tracts <- st_as_sf(flood_zones, wkt = "geometry")
-
-# Set original CRS
-va_tracts <- st_set_crs(flood_zones, 4269)
-
-# If you need to transform to a specific CRS (e.g., to WGS 84)
-va_tracts <- st_transform(flood_zones, 4326)
-```
-
 Joining flood zones and points to see if events are in the zone.
 
 ```{r geodc}
