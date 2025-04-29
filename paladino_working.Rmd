@@ -733,57 +733,72 @@ library(dplyr)
 library(readr)
 library(tidyr)
 
-path <- "/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv"
-flood_hazard <- read_csv(path)
+fh_path <- "/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv"
+final_summary_path = '/Users/andrewpaladino/Documents/xyzeus/final_table_summary.csv'
+flood_hazard <- read_csv(fh_path)
+final_summary = read_csv(final_summary_path)
 
-flood_hazard <- flood_hazard %>%
-  filter(`properties.SFHA_TF` == "T")
-
-flood_hazard <- flood_hazard %>%
-  mutate(geometry = st_as_sfc(geometry, crs = 4326))
-flood_hazard_geo <- st_as_sf(flood_hazard, crs = 4326)
-flood_hazard_geo <- flood_hazard_geo %>%
-  select(-any_of(c("index_left", "index_right")))
-flood_events <- flood_events %>%
-  select(-any_of(c("index_left", "index_right")))
-flood_events_flood_hazard <- st_join(flood_events, flood_hazard_geo, join = st_within, left = TRUE)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(scales)
+install.packages('caret')
+library(caret)   # for preProcess
+install.packages('ggpmisc')
+library(ggpmisc) # for OLS trendline with equation
 
 
-flood_summary <- flood_events_flood_hazard %>%
-  group_by(GIDBG, census_geometry) %>%
-  summarise(
-    total_flood_events = n(),
-    unique_flood_zones = n_distinct(`properties.DFIRM_ID`, na.rm = TRUE),
-    unique_zone_types = list(unique(na.omit(`properties.FLD_ZONE`))),
-    unique_flooding_risk_types = list(unique(na.omit(`properties.esri_symbology`))),
-    .groups = "drop"
+dc_attr <- read_csv("/Users/andrewpaladino/Downloads/dc_attribution.csv")
+md_attr <- read_csv("/Users/andrewpaladino/Downloads/md_attribution.csv")
+va_attr <- read_csv("/Users/andrewpaladino/Downloads/va_attribution.csv")
+
+total_attr <- bind_rows(dc_attr, md_attr, va_attr)
+
+attributions_final_merge <- final_summary %>%
+  left_join(total_attr, by = "GIDBG")
+
+# Normalize total_flood_events and total_flood_zone_area
+norm_vars <- attributions_final_merge %>%
+  select(total_flood_events, total_flood_zone_area)
+
+preproc <- preProcess(norm_vars, method = c("range"))  # Min-Max Scaling
+norm_scores <- predict(preproc, norm_vars)
+
+# Add normalized scores and vulnerability score
+attributions_final_merge <- attributions_final_merge %>%
+  mutate(
+    event_score = norm_scores$total_flood_events,
+    area_score = norm_scores$total_flood_zone_area,
+    vulnerability_score = event_score * (1 - area_score)
   )
 
+# Plot 1: Vulnerability vs Median Household Income
+ggplot(attributions_final_merge, aes(x = vulnerability_score, y = Med_HHD_Inc_BG_ACS_17_21, color = Med_HHD_Inc_BG_ACS_17_21)) +
+  geom_point(alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "Vulnerability Score vs Median Household Income",
+    x = "Vulnerability Score",
+    y = "Median Household Income"
+  ) +
+  theme_minimal()
 
-flood_summary_gdf <- st_as_sf(flood_summary, crs = 4326)
-flood_hazard_geo_proj <- st_transform(flood_hazard_geo, crs = 6933)
-flood_summary_gdf_proj <- st_transform(flood_summary_gdf, crs = 6933)
-flood_hazard_clipped <- st_intersection(
-  flood_hazard_geo_proj, 
-  st_geometry(flood_summary_gdf_proj)  # <- THIS IS THE KEY 🔥
-)
-flood_hazard_clipped <- st_sf(flood_hazard_clipped) %>%
-  mutate(clipped_area = st_area(geometry))
-flood_hazard_clipped <- st_join(flood_hazard_clipped, flood_summary_gdf_proj, join = st_within, left = TRUE)
+# Plot 2: Vulnerability vs % Mobile Homes
+ggplot(attributions_final_merge, aes(x = vulnerability_score, y = pct_Mobile_Homes_ACS_17_21, color = pct_Mobile_Homes_ACS_17_21)) +
+  geom_point(alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "Vulnerability Score vs % Mobile Homes",
+    x = "Vulnerability Score",
+    y = "% Mobile Homes"
+  ) +
+  theme_minimal()
 
 
-flood_zone_area_summary <- flood_hazard_clipped %>%
-  st_drop_geometry() %>%      # <- THIS FIXES IT: remove sf before joining
-  group_by(GIDBG) %>%
-  summarise(total_flood_zone_area = sum(clipped_area, na.rm = TRUE), .groups = "drop")
 
-final_summary <- flood_summary_gdf %>%
-  left_join(flood_zone_area_summary, by = "GIDBG") %>%
-  mutate(total_flood_zone_area = replace_na(total_flood_zone_area, units::set_units(0, "m^2")))
 
-```
-```{r}
-final_summary
 ```
 
 
