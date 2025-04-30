@@ -74,6 +74,15 @@ nfhl_df <- rows %>%
 print(head(nfhl_df))
 
 ```
+The above chunk extracts the html for Fema's NFHL viewer and parses it into a dataframe listing:
+
+* dfirm_id - 6 digit FEMA identifier for locality (approximate mapping to FIPS5)
+* county - County Name (contains carriage returns)
+* state - State Name
+* effective_date - Date the NFHL for the DFIRM was compiled/effective as of
+* file_size - Size of NFHL zip for DFIRM
+* url - Download URL for DFIRM
+
 
 ```{r nfhl_scrape, eval=FALSE}
 
@@ -179,7 +188,7 @@ for (zip_path in zip_files) {
 
   if (is.null(flood_layer)) next
 
-  Summarize FLD_ZONE counts
+  #Summarize FLD_ZONE counts
   pivot <- flood_layer %>%
     st_drop_geometry() %>%
     count(FLD_ZONE, name = "COUNT") %>%
@@ -195,9 +204,9 @@ for (zip_path in zip_files) {
   unlink(temp_dir, recursive = TRUE)
 }
 
-
-
 ```
+
+The above codeblock iteratively unzips the downloaded NFHL-DFIRM data into a temp directory and constructs a dataframe with GEOID/DFIRM6, a pivot of count of floodzone designations for census tract, and counts of these designations within the GEOID/DFIRM.
 
 ```{r write_geoidoutputs, eval=FALSE}
 write.csv(outputs, file = "data/outputs.csv", row.names = FALSE)
@@ -325,8 +334,6 @@ The above chunk will write the joined noaa event details table to data_dir. Only
 ```{r noaa_tableload}
 #will read the filtered storm_details_dmv.csv.gz saved to your repo data directory from GDrive
 
-
-
 read_pipe_csv_gz <- function(input_dir, filename) {
   file_path <- file.path(input_dir, paste0(filename, ".csv.gz"))
   
@@ -446,7 +453,14 @@ storm_details_df <- storm_details_df %>%
   )
 ```
 
-There are certain fields within the event details data which need cleaning. For example, FIPS county (`CZ_FIPS`) is not left padded, and `DAMAGE_PROPERTY` and `DAMAGE_CROPS` have string scalars that need to be handled.s
+There are certain fields within the event details data which need cleaning. For example, FIPS county (`CZ_FIPS`) is not left padded, and `DAMAGE_PROPERTY` and `DAMAGE_CROPS` have string scalars (`k`, `m`) that need to be handled.
+
+We pad CZ_FIPS and construct the FIPS5/GEOID as a string concatenation of `STATE_FIPS` + `CZ_FIPS`
+
+We convert the scalars to scientific notation and apply them to the damage fields. The transformed fields are named as `DAMAGE_PROPERTY_CLEAN` and `DAMAGE_CROPS_CLEAN` respectively.
+
+Here also we tabulate `TOTAL_DAMAGE` as `DAMAGE_PROPERTY_CLEAN` + `DAMAGE_CROPS_CLEAN`.
+
 
 # 3. Spatial Join and Aggregation
 
@@ -556,11 +570,11 @@ distinct_na_A_FIPS5 <- events_flood_df %>%
 Here we implement the join described above using the link table, and we extract unmatched IDs from each for exploration (which is how the manual lookup values were derived above)
 
 
-```{r write_eventsflood}
+```{r write_eventsflood, eval=FALSE}
 write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
 ```
 
-Joined table is written.
+Joined table is written. This block will not need to be run if the user has events_flood_df in their user data directory.
 
 ```{r load_eventsflood}
 events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.default = "c"))
@@ -607,6 +621,8 @@ events_flood_df <- events_flood_df %>%
     DECADE = factor(DECADE, levels = c("90s", "00s", "10s", "2020-2024"))
   )
 ```
+
+Aggregate data by decade for 1990s to 2020s (to-date).
 
 - Plot trends in:
   - Event frequency
