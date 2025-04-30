@@ -17,7 +17,6 @@ set.seed(20052)
 
 #install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
-library(ezids)
 pkg_vector <- c("AOI","INLA","NFHL","broom","dplyr","exactextractr","ggbreak",
                 "ggplot2","htmltools","htmlwidgets","httr","leaflet",
                 "leaflet.extras","lmtest","purrr","raster","readr","reader",
@@ -141,7 +140,7 @@ library(tidyr)
 library(purrr)
 
 # Directory containing your zip files
-zip_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test/nfhl_zips"
+zip_dir <- paste0(data_dir,'/nfhl_zips')
 
 # List of zip files (assuming they start with 5-digit GEOID prefix)
 zip_files <- list.files(zip_dir, pattern = "^\\d{5}.*\\.zip$", full.names = TRUE)
@@ -241,7 +240,8 @@ file_links <- page %>%
 full_urls <- paste0(base_url, file_links)
 
 # Download folder (you can change this)
-download_dir <- "C:/Users/russe/Documents/github/6289spatial_final/data/test"
+download_dir <- paste0(data_dir,'/nwsalerts_bulkextract')
+
 dir.create(download_dir, showWarnings = FALSE)
 
 # Loop to download with delays
@@ -325,7 +325,7 @@ The above chunk will write the joined noaa event details table to data_dir. Only
 ```{r noaa_tableload}
 #will read the filtered storm_details_dmv.csv.gz saved to your repo data directory from GDrive
 
-data_dir = "C:/Users/russe/Documents/github/6289spatial_final/data"
+
 
 read_pipe_csv_gz <- function(input_dir, filename) {
   file_path <- file.path(input_dir, paste0(filename, ".csv.gz"))
