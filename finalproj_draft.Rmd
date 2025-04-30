@@ -1,6 +1,6 @@
 ---
 title: "6289_final_3"
-author: "rballard myork [uname]"
+author: "rballard myork apaladino[uname]"
 date: "2025-04-15"
 output: html_document
 ---
@@ -9,25 +9,6 @@ output: html_document
 # PROJECT NAME
 
 ## Frontmatter
-```{r ezidsetup, eval= FALSE}
-#https://github.com/physicsland/ezids
-if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
-install.packages ("devtools")
-devtools::install_github("physicsland/ezids")
-```
-The above installs ezids, a package manager developed and maintained by GW DS Department.
-
-# PROJECT NAME
-
-## Frontmatter
-```{r ezidsetup,eval=FALSE}
-#https://github.com/physicsland/ezids
-if (!requireNamespace("remotes", quietly = TRUE)) { install.packages("remotes") }
-install.packages ("devtools")
-devtools::install_github("physicsland/ezids")
-install.packages("ezids")
-```
-The above installs ezids, a package manager developed and maintained by GW DS Department.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -43,7 +24,12 @@ pkg_vector <- c("AOI","INLA","NFHL","broom","dplyr","exactextractr","ggbreak",
                 "rfema","rvest","sf","spData","spdep","spatialreg","sphet",
                 "stringr","terra","tigris","tidycensus","tidyr","tmap","xml2")
 
-invisible(lapply(pkg_vector,loadPkg))
+# Install missing packages
+missing_packages <- setdiff(pkg_vector, rownames(installed.packages()))
+if (length(missing_packages)) install.packages(missing_packages)
+
+# Load all packages
+invisible(lapply(pkg_vector, function(pkg) suppressPackageStartupMessages(library(pkg, character.only = TRUE))))
 
 
 #User needs to set their own data_dir if working directory not repo base
