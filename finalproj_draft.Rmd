@@ -325,14 +325,14 @@ write_pipe_csv_gz <- function(df, output_dir, filename) {
   message("File written to: ", file_path)
 }
 
-write_pipe_csv_gz(storm_details_dmv, data_dir, "storm_details_dmv")
+write_pipe_csv_gz(storm_details_df, data_dir, "storm_details_df")
 ```
 
 The above chunk will write the joined noaa event details table to data_dir. Only needs to be run if a new table of noaa events has been downloaded.
 
 
 ```{r noaa_tableload}
-#will read the filtered storm_details_dmv.csv.gz saved to your repo data directory from GDrive
+#will read the filtered storm_details_df.csv.gz saved to your repo data directory from GDrive
 
 read_pipe_csv_gz <- function(input_dir, filename) {
   file_path <- file.path(input_dir, paste0(filename, ".csv.gz"))
@@ -348,7 +348,7 @@ read_pipe_csv_gz <- function(input_dir, filename) {
   return(df)
 }
 
-storm_details_df <- as_tibble(read_pipe_csv_gz(data_dir, "storm_details_dmv"))
+storm_details_df <- as_tibble(read_pipe_csv_gz(data_dir, "storm_details_df"))
 ```
 
 The above code chunk can be used to load a previously saved noaa event details .csv.gz to proceed with processing.
