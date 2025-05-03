@@ -714,9 +714,19 @@ dmg_tot <- ggplot(decade_damage_t, aes(x = DECADE, y = log(TOTAL_DAMAGE + 1))) +
 
 library(gridExtra)
 grid.arrange(dmg_fips, dmg_tot, ncol = 2, widths = c(1, 1))
+
+zero_damage_count <- decade_damage_f %>%
+  filter(TOTAL_DAMAGE == 0) %>%
+  nrow()
+
+fips_zerodamage <- zero_damage_count
+fipscount <- length(decade_damage_f$FIPS5)
+
+propzerodamage <- fips_zerodamage/fipscount
+
 ```
 
-In the above FIPS5 and DMV Decade Total Flood Events time series aggregations we can see that individual counties saw a drop in estimated damage (in log dollars) due to flooding in the 2000s when compared to the 1990s, however the trend is generally positive, and 2020-2024 total damage cost is already almost equivalent to the 2010s, meaning that flooding events have become more severe over time in terms of damage expenses.
+In the above FIPS5 and DMV Decade Total Flood Events time series aggregations we can see that individual counties saw a drop in estimated damage (in log dollars) due to flooding in the 2000s when compared to the 1990s, however the trend is generally positive, and 2020-2024 total damage cost is already almost equivalent to the 2010s, meaning that flooding events have become more severe over time in terms of damage expenses. A log transformation is applied as roughly `r round(propzerodamage,2)` of event observations have no estimated damage.
 
 ```{r viz_eventsflood_decadefrequency}
 
@@ -757,7 +767,7 @@ caus_fips <- ggplot(decade_casualty_f, aes(x = DECADE, y = TOTAL_CASUALTIES)) +
   labs(
     title = "Distribution of Total Flood Casualties by\nFIPS5 (County) by Decade",
     x = "Decade",
-    y = "Total Flood Events by FIPS5 (County)"
+    y = "Total Flood Casualties by FIPS5 (County)"
   ) +
   theme_minimal() +
   theme(
