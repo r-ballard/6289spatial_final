@@ -40,7 +40,7 @@ data_dir <- paste0(getwd(),'/data')
 - Extract Layer 28 polygons for the DMV region using the `NFHL` R package.
 - Filter for **Special Flood Hazard Areas (SFHA)** using the condition `SFHA_TF == "T"`.
 
-```{r createnfhldf}
+```{r createnfhldf,eval=FALSE}
 
 # FEMA NFHL base URL
 base_url <- "https://hazards.fema.gov/femaportal/NFHL/"
@@ -111,7 +111,7 @@ full_urls <- gsub(" ", "%20", full_urls)
 
 
 # Optional: Set destination folder
-dest_dir <- "data/test/nfhl_zips"
+dest_dir <- paste0(data_dir,"/nfhl_zips")
 dir.create(dest_dir, showWarnings = FALSE)
 
 # Download function with polite wait
@@ -209,14 +209,14 @@ for (zip_path in zip_files) {
 The above codeblock iteratively unzips the downloaded NFHL-DFIRM data into a temp directory and constructs a dataframe with GEOID/DFIRM6, a pivot of count of floodzone designations for census tract, and counts of these designations within the GEOID/DFIRM.
 
 ```{r write_geoidoutputs, eval=FALSE}
-write.csv(outputs, file = "data/outputs.csv", row.names = FALSE)
+write.csv(outputs, file = paste0(data_dir,"/outputs.csv"), row.names = FALSE)
 ```
 
 The above codeblock writes the resultant parsed geoid dataframe to the user data directory. Should only be run if the above codeblock transforming the shapefiles is run.
 
 
 ```{r load_outputs}
-outputs <- read_csv("data/outputs.csv", col_types = cols(.default = "c"))
+outputs <- read_csv(paste0(data_dir,"/outputs.csv"), col_types = cols(.default = "c"))
 ```
 
 The above codeblock reads the parsed geoid dataframe to the user data directory.
@@ -273,7 +273,7 @@ for (url in full_urls) {
 
 The above code chunk downloads NOAA Event Details for 1950-2024. It should only be run if data is not already present in development environment.
 
-```{r noaa_rowjoin}
+```{r noaa_rowjoin, eval=FALSE}
 #rowwise joins of event details, fatalities, and locations
 
 
@@ -302,7 +302,8 @@ head(storm_details_df)
 
 ```
 
-The above code chunk reads in and conducts a rowwise join of the annual NOAA event tables 
+The above code chunk reads in and conducts a rowwise join of the annual NOAA event tables. Will only need to be run if a new dataset is being constructed.
+
 
 ```{r noaa_tablewrite, eval=FALSE}
 #writes processed table
@@ -571,13 +572,13 @@ Here we implement the join described above using the link table, and we extract 
 
 
 ```{r write_eventsflood, eval=FALSE}
-write.csv(events_flood_df, file = "data/events_flood_df.csv", row.names = FALSE)
+write.csv(events_flood_df, file = paste0(data_dir,"/events_flood_df.csv"), row.names = FALSE)
 ```
 
 Joined table is written. This block will not need to be run if the user has events_flood_df in their user data directory.
 
 ```{r load_eventsflood}
-events_flood_df <- read_csv("data/events_flood_df.csv", col_types = cols(.default = "c"))
+events_flood_df <- read_csv(paste0(data_dir,"/events_flood_df.csv"), col_types = cols(.default = "c"))
 
 events_flood_df <- events_flood_df %>%
   mutate(
