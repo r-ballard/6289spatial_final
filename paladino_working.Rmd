@@ -773,9 +773,7 @@ library(readr)
 library(dplyr)
 library(ggplot2)
 library(scales)
-install.packages('caret')
 library(caret)   # for preProcess
-install.packages('ggpmisc')
 library(ggpmisc) # for OLS trendline with equation
 
 
