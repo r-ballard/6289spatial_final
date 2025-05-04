@@ -1,7 +1,7 @@
 Yo !
 
 
-# Block Group. Enrichment
+# Block Group Enrichment, Joins, and Aggregation 
 ```{r}
 
 library(sf)
@@ -202,7 +202,7 @@ state_group_flood <- flood_events %>%
 
 ```
 
-# County Enrichment 
+# County Level Enrichment, Joins, and Aggregation 
 
 ```{r}
 
@@ -250,7 +250,7 @@ flood_events_county_group <- flood_events_county %>%
 
 
 ```
-
+# Event Counts Per County 
 
 ```{r}
 library(ggplot2)
@@ -295,7 +295,7 @@ ggsave("/Users/andrewpaladino/Downloads/flood_events_county_map.png", plot = flo
 
 
 
-# PLOTS
+# Line Plots / Timeseries Analysis of Event Group Per Block Groups Over Time 
 
 ```{r}
 
@@ -325,6 +325,8 @@ ggplot(bg_group_flood, aes(x = YEAR, y = event_count, color = GIDBG, group = GID
 
 ```
 
+# Line Plots / Timeseries Analysis of Event Group Per Tracts Over Time 
+
 ```{r}
 
 ggplot(tract_group, aes(x = YEAR, y = event_count, color = tract_code, group = tract_code)) +
@@ -352,6 +354,7 @@ ggplot(tract_group_flood, aes(x = YEAR, y = event_count, color = tract_code, gro
   guides(color = guide_legend(nrow = 3, byrow = TRUE))
 
 ```
+# Line Plots / Timeseries Analysis of Event Group Per County Over Time 
 
 ```{r}
 
@@ -383,6 +386,8 @@ ggplot(county_group_flood, aes(x = YEAR, y = event_count, color = county_code, g
 
 ```
 
+# Line Plots / Timeseries Analysis of Event Group Per State Over Time 
+
 ```{r}
 
 ggplot(state_group, aes(x = YEAR, y = event_count, color = STATE, group = STATE)) +
@@ -411,6 +416,8 @@ ggplot(state_group_flood, aes(x = YEAR, y = event_count, color = STATE, group = 
 
 
 ```
+
+# Total Event Count vs. Flood Specific Event Count per County over Time
 
 ```{r, fig.width=10, fig.height=8}
 
@@ -441,6 +448,8 @@ ggplot(sum_bg_group_flood) +
 ```{r}
 
 ```
+
+# Creating plot to include in the animation in the below cell, both are which we did not use in the final report
 
 ```{r}
 
@@ -486,39 +495,18 @@ flood_events_ani <- ggplot(bg_group_flood) +
 
 ```
 
+# Animation of Flood Event Counts per Block Group, which we did not include in the Report
+
 ```{r}
 #animate(all_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
-animate(flood_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
+#animate(flood_events_ani, width = 1000, height = 800, fps = 2, renderer = gifski_renderer())
 
 ```
 
-#### different maps and casualties, different things with flood events
 
-###### join on events, flood hazard ---- determine % of events fall within and % of events fall outside flood zones... this will determine if flood zones need remapped \### /Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv
 
-###### join on flood hazard, census tracts ... maybe??
 
-# event type
-
-# damage property
-
-# damage crops
-
-# margnitude
-
-# deaths direct
-
-# deaths indirect
-
-# injuries direct
-
-# injuries indirect
-
-```{r}
-
-```
-
-# FLOOD DAMAGE PROPERTY
+# Mapping FLOOD DAMAGE PROPERTY per block group ~ did not include in final report / analysis
 
 ```{r}
 
@@ -562,7 +550,7 @@ ggplot(flood_events_damage_group) +
 
 ```
 
-# Flood Damage Crops
+# Mapping Flood Damage Crops per block group over time, this analysis was also not included in final report / analysis
 
 ```{r}
 
@@ -604,7 +592,7 @@ ggplot(flood_events_crop_group) +
 
 ```
 
-# Magnitude
+# Mapping Magnitude of flood events per block group over time. 
 
 ```{r}
 
@@ -633,15 +621,9 @@ ggplot(flood_events_mag_group) +
   theme_minimal()
 ```
 
-# Injuries and Deaths
 
-```{r}
 
-flood_events
-
-```
-
-# Summary Tables Total Events
+# Computing Summary Tables Total Events using aggregation functions
 
 ```{r}
 
@@ -679,7 +661,7 @@ total_events_state
 
 ```
 
-# Summary Table Flood Events
+# Creating Summary Table of Flood Events per census level over time 
 
 ```{r}
 library(dplyr)
@@ -716,7 +698,7 @@ flood_events_states
 
 ```{r}
 
-write.csv(flood_events, "/Users/andrewpaladino/Downloads/flood_events.csv", row.names = FALSE)
+
 
  
 
@@ -725,13 +707,62 @@ write.csv(flood_events, "/Users/andrewpaladino/Downloads/flood_events.csv", row.
 
 
 
-
+# Piecing it all together !!!
+### Here we wrote the logic in python to join hazard layers into our table of flood events + block groups. We then computed an aggregation so that on a per block group basis we had total storm event counts and total mapped areas (square meters of flood zones). This logic is included in the commented out section of code below. We imported the resulting table (final table summary) into this environment, where we created a vulnerability score into our table and then enriched our table with block group demographics to analyze socialeconomic trends.  
 
 ```{r}
 library(sf)
 library(dplyr)
 library(readr)
 library(tidyr)
+
+# 
+# # Python logic prior to import
+# import pandas as pd
+# import geopandas as geo
+# from shapely.wkt import loads
+# 
+# # 1. Load flood hazard layer
+# path = '/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv'
+# flood_hazard = pd.read_csv(path)
+# 
+# 
+# flood_hazard = flood_hazard[flood_hazard['properties.SFHA_TF'] == 'T']
+# flood_hazard['geometry'] = flood_hazard['geometry'].apply(lambda x: loads(x) if pd.notnull(x) else None)
+# flood_hazard_geo = geo.GeoDataFrame(flood_hazard, geometry='geometry', crs='EPSG:4326')
+# flood_hazard_geo = flood_hazard_geo.drop(columns=['index_left', 'index_right'], errors='ignore')
+# flood_events = flood_events.drop(columns=['index_left', 'index_right'], errors='ignore')
+# 
+# flood_events_flood_hazard = geo.sjoin(flood_events, flood_hazard_geo, how='left', predicate='within')
+# flood_summary = flood_events_flood_hazard.groupby(['GIDBG', 'census_geometry']).agg(
+#     total_flood_events=('geometry', 'count'),                     
+#     unique_flood_zones=('properties.DFIRM_ID', 'nunique'),         
+#     unique_zone_types=('properties.FLD_ZONE', lambda x: list(x.dropna().unique())),
+#     unique_flooding_risk_types=('properties.esri_symbology', lambda x: list(x.dropna().unique()))
+# ).reset_index()
+# 
+# flood_summary_gdf = geo.GeoDataFrame(
+#     flood_summary,
+#     geometry=flood_summary['census_geometry'],
+#     crs='EPSG:4326'
+# ).drop(columns='census_geometry')
+# 
+# 
+# flood_hazard_geo_proj = flood_hazard_geo.to_crs(epsg=6933)
+# flood_summary_gdf_proj = flood_summary_gdf.to_crs(epsg=6933)
+# flood_hazard_clipped = geo.overlay(flood_hazard_geo_proj, flood_summary_gdf_proj, how='intersection')
+# flood_hazard_clipped['clipped_area'] = flood_hazard_clipped.geometry.area  # Now meters²!
+# flood_zone_area_summary = flood_hazard_clipped.groupby('GIDBG').agg(
+#     total_flood_zone_area=('clipped_area', 'sum')
+# ).reset_index()
+# 
+# final_summary = flood_summary_gdf.merge(flood_zone_area_summary, on='GIDBG', how='left')
+# final_summary['total_flood_zone_area'] = final_summary['total_flood_zone_area'].fillna(0)
+# 
+# print(final_summary.head())
+# final_summary.to_csv('final_table_summary.csv')
+
+
 
 fh_path <- "/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv"
 final_summary_path = '/Users/andrewpaladino/Documents/xyzeus/final_table_summary.csv'
