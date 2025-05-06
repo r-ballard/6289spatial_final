@@ -12,12 +12,12 @@ library(readr)
 library(ggplot2)
 
 
-dc <- read_csv("/Users/andrewpaladino/Downloads/block_groups_dc.csv")
-va <- read_csv("/Users/andrewpaladino/Downloads/block_groups_va.csv")
-md <- read_csv("/Users/andrewpaladino/Downloads/block_groups_md.csv")
-osm_buildings <- read_csv("/Users/andrewpaladino/Documents/xyzeus/data/building_footprints.csv")
-noaa_flood_dc <- read_csv("/Users/andrewpaladino/Downloads/noaa_flood_dc.csv")
-storm_data <- read_delim("/Users/andrewpaladino/Downloads/storm_details_dmv.csv", delim = "|")
+dc <- read_csv("data/block_groups_dc.csv")
+va <- read_csv("data/block_groups_va.csv")
+md <- read_csv("data/block_groups_md.csv")
+osm_buildings <- read_csv("data/building_footprints.csv")
+noaa_flood_dc <- read_csv("data/noaa_flood_dc.csv")
+storm_data <- read_delim("data/storm_details_dmv.csv", delim = "|")
 
 bg_total <- bind_rows(dc, va, md)
 bg_total_geo <- st_as_sf(bg_total, wkt = "geometry", crs = 4326)
@@ -214,11 +214,11 @@ library(sf)
 library(stringr)
 
 
-dc_counties <- read_csv('/Users/andrewpaladino/Downloads/dc_counties.csv') %>%
+dc_counties <- read_csv('data/dc_counties.csv') %>%
   mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
-va_counties <- read_csv('/Users/andrewpaladino/Downloads/virginia_counties.csv') %>%
+va_counties <- read_csv('data/virginia_counties.csv') %>%
   mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
-md_counties <- read_csv('/Users/andrewpaladino/Downloads/md_counties.csv') %>%
+md_counties <- read_csv('data/md_counties.csv') %>%
   mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
 
 
@@ -280,7 +280,7 @@ flood_map <- ggplot(flood_events_county_group) +
 print(flood_map)
 
 # Optional: Save the plot MUCH bigger
-ggsave("/Users/andrewpaladino/Downloads/flood_events_county_map.png", plot = flood_map, width = 20, height = 15, dpi = 300)  # huge plot
+# ggsave("/Users/andrewpaladino/Downloads/flood_events_county_map.png", plot = flood_map, width = 20, height = 15, dpi = 300)  # huge plot
 
 ```
 
@@ -723,7 +723,7 @@ library(tidyr)
 # from shapely.wkt import loads
 # 
 # # 1. Load flood hazard layer
-# path = '/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv'
+# path = 'data/flood_insurance_hazard_all.csv'
 # flood_hazard = pd.read_csv(path)
 # 
 # 
@@ -764,8 +764,8 @@ library(tidyr)
 
 
 
-fh_path <- "/Users/andrewpaladino/Documents/xyzeus/data/flood_insurance_hazard_all.csv"
-final_summary_path = '/Users/andrewpaladino/Documents/xyzeus/final_table_summary.csv'
+fh_path <- "data/flood_insurance_hazard_all.csv"
+final_summary_path = 'data/final_table_summary.csv'
 flood_hazard <- read_csv(fh_path)
 final_summary = read_csv(final_summary_path)
 
@@ -777,9 +777,9 @@ library(caret)   # for preProcess
 library(ggpmisc) # for OLS trendline with equation
 
 
-dc_attr <- read_csv("/Users/andrewpaladino/Downloads/dc_attribution.csv")
-md_attr <- read_csv("/Users/andrewpaladino/Downloads/md_attribution.csv")
-va_attr <- read_csv("/Users/andrewpaladino/Downloads/va_attribution.csv")
+dc_attr <- read_csv("data/dc_attribution.csv")
+md_attr <- read_csv("data/md_attribution.csv")
+va_attr <- read_csv("data/va_attribution.csv")
 
 total_attr <- bind_rows(dc_attr, md_attr, va_attr)
 
