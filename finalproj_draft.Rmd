@@ -1,12 +1,12 @@
 ---
 title: "6289_final_3"
-author: "rballard myork apaladino[uname]"
+author: "rballard myork apaladino"
 date: "2025-04-15"
 output: html_document
 ---
 
 
-# PROJECT NAME
+# Project 3: Flood Risk Mismatch in the Mid-Atlantic
 
 ## Frontmatter
 
