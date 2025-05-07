@@ -1,7 +1,7 @@
 ---
-title: "FEMA_mismatch"
+title: "york_working"
 output: html_document
-date: "2025-04-25"
+date: "2025-05-07"
 ---
 
 ```{r setup, include=FALSE}
@@ -9,11 +9,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
 ```{r load_floods}
 library(dplyr)
 library(ggplot2)
@@ -33,9 +28,10 @@ library(tidyr)
 library(shiny)
 
 # Load in NOAA flood data
-floods <- read.csv("/Users/marleeyork/6289spatial_final/data/events_flood_df.csv")
+floods <- read.csv("./data/6289spatial_final/data/events_flood_df.csv")
 
 # Aggregate floods by year
+floods$year <- floods$YEAR
 yearly_floods <- floods %>% group_by(year) %>% count()
 yearly_floods <- data.frame(yearly_floods)
 
@@ -52,7 +48,7 @@ x_max <- max(data$year + 1)
 Loading in the flood zones for DC, MD, and VA.
 ```{r load_zones}
 # Load in the flood zones
-flood_zones <- read.csv("/Users/marleeyork/6289spatial_final/data/flood_insurance_hazard_all.csv")
+flood_zones <- read.csv("./data/flood_insurance_hazard_all.csv")
 
 # Convert WKT (Well-Known Text) POLYGON strings to sf objects
 flood_zones <- st_as_sf(flood_zones, wkt = "geometry", crs = 4362)
@@ -123,10 +119,9 @@ floods_with_zones_fixed <- floods_with_specific_zones %>%
     in_flood_zone = (!is.na(properties.FLD_ZONE.y) & (properties.FLD_ZONE.y != "X"))
   )
 
-# Calculate statistics for each specific polygon
 zone_specific_stats <- floods_with_zones_fixed %>%
   st_drop_geometry() %>%
-  group_by(polygon_id) %>%
+  group_by(polygon_id.y) %>%
   summarise(
     FLD_ZONE = first(properties.FLD_ZONE.y),
     n_events = n(),
@@ -134,6 +129,8 @@ zone_specific_stats <- floods_with_zones_fixed %>%
     n_flash = sum(if_else(event_type == "Flash Flood", 1, 0, missing = 0)),
     n_coastal = sum(if_else(event_type == "Coastal Flood", 1, 0, missing = 0))
   )
+
+zone_specific_stats$polygon_id <- zone_specific_stats$polygon_id.y
 
 # Join these stats back to the original polygons
 flood_zones_stats <- flood_zones_fixed %>%
@@ -144,6 +141,7 @@ flood_zones_stats <- flood_zones_fixed %>%
   )
 ```
 
+Now setting up specifications for DC map.
 ```{r dc_mis_map}
 # Create zone labels
 zone_labels <- c("In" = "Zone AE/A (Minimal Risk)", "Out" = "Zone X (Moderate Risk)")
@@ -169,6 +167,7 @@ flood_zones_stats <- st_transform(flood_zones_stats, crs = 4326)
 floods_with_zones_fixed <- st_transform(floods_with_zones_fixed, crs = 4326)
 ```
 
+Creating interactive map for DC.
 ```{r geodc}
 # Create a lookup object for zone statistics to use in JavaScript
 zone_stats_lookup <- flood_zones_stats %>%
@@ -278,15 +277,12 @@ function(el, x) {
 ", zone_stats_lookup)
 
 
-# Convert Date to year (assuming 'Date' contains date values)
-floods_with_zones_fixed$Year <- as.numeric(format(as.Date(floods_with_zones_fixed$Date), "%Y"))
-
 # Find min and max years for the palette
-min_year <- min(floods_with_zones_fixed$Year, na.rm = TRUE)
-max_year <- max(floods_with_zones_fixed$Year, na.rm = TRUE)
+min_year <- min(floods_with_zones_fixed$year, na.rm = TRUE)
+max_year <- max(floods_with_zones_fixed$year, na.rm = TRUE)
 
 # 1. Year-based gradient (as discussed previously)
-floods_with_zones_fixed$Year <- as.numeric(format(as.Date(floods_with_zones_fixed$Date), "%Y"))
+floods_with_zones_fixed$Year <- as.numeric(floods_with_zones_fixed$year)
 min_year <- min(floods_with_zones_fixed$Year, na.rm = TRUE)
 max_year <- max(floods_with_zones_fixed$Year, na.rm = TRUE)
 pal_years <- colorNumeric(
@@ -350,10 +346,9 @@ year_markers <- floods_with_zones_fixed %>%
     fillOpacity = 0.8,
     layerId = ~paste0("year_", marker_id),
     popup = ~paste0(
-      "<strong>Date:</strong> ", Date, "<br/>",
       "<strong>Year:</strong> ", Year, "<br/>",
       "<strong>In zone?</strong> ", ifelse(in_flood_zone, "Yes", "No"), "<br/>",
-      "<strong>Zone polygon:</strong> ", ifelse(is.na(polygon_id), "None", polygon_id)
+      "<strong>Zone polygon:</strong> ", ifelse(is.na(polygon_id.y), "None", polygon_id.y)
     ),
     group = "Color by Year"
   )
@@ -371,9 +366,9 @@ zone_markers <- floods_with_zones_fixed %>%
     fillOpacity = 0.8,
     layerId = ~paste0("zone_", marker_id),
     popup = ~paste0(
-      "<strong>Date:</strong> ", Date, "<br/>",
+      "<strong>Year:</strong> ", Year, "<br/>",
       "<strong>In zone?</strong> ", ifelse(in_flood_zone, "Yes", "No"), "<br/>",
-      "<strong>Zone polygon:</strong> ", ifelse(is.na(polygon_id), "None", polygon_id)
+      "<strong>Zone polygon:</strong> ", ifelse(is.na(polygon_id.y), "None", polygon_id.y)
     ),
     group = "Color by Flood Zone"
   )
