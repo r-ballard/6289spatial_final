@@ -21,7 +21,9 @@ pkg_vector <- c("AOI","INLA","NFHL","broom","dplyr","exactextractr","ggbreak",
                 "ggplot2","htmltools","htmlwidgets","httr","leaflet",
                 "leaflet.extras","lmtest","purrr","raster","readr","reader",
                 "rfema","rvest","sf","spData","spdep","spatialreg","sphet",
-                "stringr","terra","tigris","tidycensus","tidyr","tmap","xml2")
+                "stringr","terra","tigris","tidycensus","tidyr","tmap","xml2",
+                'plotly', 'gganimate')
+
 
 # Install missing packages
 missing_packages <- setdiff(pkg_vector, rownames(installed.packages()))
