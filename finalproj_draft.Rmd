@@ -20,9 +20,10 @@ set.seed(20052)
 pkg_vector <- c("AOI","INLA","NFHL","broom", "caret", "dplyr","exactextractr","ggbreak",
                 "gganimate", "ggpmisc", "ggplot2", "gridExtra", "htmltools","htmlwidgets","httr","leaflet",
                 "leaflet.extras","lmtest", "plotly", "purrr","raster","readr","reader",
-                "rfema","rvest", "scales", "sf","spData","spdep","spatialreg","sphet",
+                "rfema","rvest", "scales", "sf", "shiny", "spData","spdep","spatialreg","sphet",
                 "stringr","terra","tigris","tidycensus","tidyr","tmap","xml2",
                 'plotly', 'gganimate')
+
 
 # Install missing packages
 missing_packages <- setdiff(pkg_vector, rownames(installed.packages()))
@@ -784,6 +785,195 @@ grid.arrange(caus_fips, caus_tot, ncol = 2, widths = c(1, 1))
 ```
 
 In the above FIPS5 and DMV Decade Total casualty time series aggregations we can see that individual counties generally do not experience casualties during flood events, with a handful experiencing 0-5 total throughout the decade, and that so far the 2020s appear to be experiencing lower casualty totals during flood events when compared to previous decades.
+
+```{r load_floods}
+# Load in NOAA flood data
+floods <- read.csv("./data/events_flood_df.csv")
+
+# Aggregate floods by year
+floods$year <- floods$YEAR
+yearly_floods <- floods %>% group_by(year) %>% count()
+yearly_floods <- data.frame(yearly_floods)
+
+# Create dataframe of dates with 0 flood events included
+data <- data.frame("year" = 1996:2024)
+data <- merge(data, yearly_floods, by = "year", all.x = TRUE)
+data$n[is.na(data$n)] <- 0
+
+# Get range of x values for rectangle
+x_min <- min(data$year - 1)
+x_max <- max(data$year + 1)
+```
+
+Loading in the flood zones for DC, MD, and VA.
+```{r load_zones}
+# Load in the flood zones
+flood_zones <- read.csv("./data/flood_insurance_hazard_all.csv")
+
+# Convert WKT (Well-Known Text) POLYGON strings to sf objects
+flood_zones <- st_as_sf(flood_zones, wkt = "geometry", crs = 4362)
+
+# Set original CRS
+flood_zones <- st_set_crs(flood_zones, 4269)
+
+# If you need to transform to a specific CRS (e.g., to WGS 84)
+flood_zones <- st_transform(flood_zones, 4326)
+print(head(flood_zones))
+```
+Adding the flood points.
+
+```{r geodc}
+# Adding the flood points
+flood_points_df <- data.frame("lat" = floods$BEGIN_LAT,
+                              "lon" = floods$BEGIN_LON,
+                              "year" = floods$YEAR,
+                              "event_type" = floods$EVENT_TYPE,
+                              "state" = floods$STATE)
+flood_points_df <- na.omit(flood_points_df)
+flood_points_sf <- st_as_sf(flood_points_df, coords = c("lon", "lat"), crs = 4326)
+
+# Match CRS of flood zones
+flood_points_sf <- st_transform(flood_points_sf, crs = st_crs(flood_zones))
+
+# Check for validity
+validity <- st_is_valid(flood_zones)
+
+# If any are FALSE, fix them
+flood_zones_fixed <- st_make_valid(flood_zones)
+```
+
+Joining flood zones and points to see if events are in the zone.
+
+```{r checking_zone}
+# Create new column to indicate whether its in the flood zone or not
+floods_with_zones <- st_join(flood_points_sf, flood_zones_fixed, join = st_intersects, left = TRUE)
+floods_with_zones_fixed <- st_make_valid(floods_with_zones)
+
+# Assign flood zone status
+floods_with_zones_fixed$in_flood_zone <- floods_with_zones$properties.FLD_ZONE %in% c("A", "AE", "VE")  
+```
+
+Now calculating the flood counts in each zone.
+```{r floodcounts_per_zone}
+# First, add polygon identifiers to each flood zone
+flood_zones_fixed <- flood_zones_fixed %>%
+  mutate(polygon_id = paste0("polygon_", row_number()))
+
+# Join flood points with specific zones
+# This will associate each flood point with the specific polygon it falls within
+floods_with_specific_zones <- st_join(
+  floods_with_zones_fixed,
+  flood_zones_fixed %>% dplyr::select(polygon_id, properties.FLD_ZONE),
+  left = TRUE
+) %>%
+  mutate(
+    marker_id = paste0("marker_", row_number()),
+    # If point doesn't fall within any polygon, in_flood_zone will be FALSE
+    in_flood_zone = (!is.na(properties.FLD_ZONE.y) & (properties.FLD_ZONE.y != "X"))
+  )
+
+# Start with your existing data preparation
+floods_with_zones_fixed <- floods_with_specific_zones %>%
+  mutate(
+    marker_id = paste0("marker_", row_number()),
+    in_flood_zone = (!is.na(properties.FLD_ZONE.y) & (properties.FLD_ZONE.y != "X"))
+  )
+
+zone_specific_stats <- floods_with_zones_fixed %>%
+  st_drop_geometry() %>%
+  group_by(polygon_id) %>%
+  summarise(
+    FLD_ZONE = first(properties.FLD_ZONE.y),
+    n_events = n(),
+    n_floods = sum(if_else(event_type == "Flood", 1, 0, missing = 0)),
+    n_flash = sum(if_else(event_type == "Flash Flood", 1, 0, missing = 0)),
+    n_coastal = sum(if_else(event_type == "Coastal Flood", 1, 0, missing = 0))
+  )
+
+
+# Join these stats back to the original polygons
+flood_zones_stats <- flood_zones_fixed %>%
+  left_join(zone_specific_stats, by = "polygon_id") %>%
+  mutate(
+    n_events = replace_na(n_events, 0),
+    zone_status = ifelse(n_events > 0, "In", "Out"),
+  )
+```
+
+Now creating the timeseries of events across the DMV.
+
+```{r timeseries_plot}
+ui <- fluidPage(
+  titlePanel("Flood Events by Year"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("selected_year", "Select Year:",
+                  min = min(floods_with_zones_fixed$year, na.rm = TRUE),
+                  max = max(floods_with_zones_fixed$year, na.rm = TRUE),
+                  value = min(floods_with_zones_fixed$year, na.rm = TRUE),
+                  sep = "", step = 1,
+                  animate = animationOptions(interval = 1500, loop = TRUE)),
+      
+      # Summary box
+      uiOutput("year_summary")
+    ),
+    
+    mainPanel(
+      leafletOutput("flood_map", height = 600)
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  
+  filtered_data <- reactive({
+    floods_with_zones_fixed %>%
+      filter(year == input$selected_year)
+  })
+  
+  output$flood_map <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles(providers$CartoDB.Positron)
+  })
+  
+  observe({
+    leafletProxy("flood_map", data = filtered_data()) %>%
+      clearMarkers() %>%
+      addCircleMarkers(
+        radius = 5,
+        stroke = TRUE,
+        weight = 1,
+        color = ~ifelse(in_flood_zone, "red", "black"),
+        fillOpacity = 0.8,
+        popup = ~paste0(
+          "<strong>Year:</strong> ", year, "<br/>",
+          "<strong>Event Type:</strong> ", event_type, "<br/>",
+          "<strong>In FEMA Flood Zone?</strong> ", ifelse(in_flood_zone, "Yes", "No")
+        )
+      )
+  })
+  
+  output$year_summary <- renderUI({
+    data <- filtered_data()
+    total_events <- nrow(data)
+    events_in_zone <- sum(data$in_flood_zone, na.rm = TRUE)
+    events_outside_zone <- sum(!data$in_flood_zone, na.rm = TRUE)
+    percent_in_zone <- ifelse(total_events > 0, round(100 * events_in_zone / total_events, 1), 0)
+    
+    HTML(paste0(
+      "<div style='margin-top: 15px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 5px;'>",
+      "<strong>Summary for ", input$selected_year, ":</strong><br/>",
+      "Total Events: ", total_events, "<br/>",
+      "In Flood Zone: ", events_in_zone, " (", percent_in_zone, "%)<br/>",
+      "Outside Flood Zone: ", events_outside_zone,
+      "</div>"
+    ))
+  })
+}
+
+shinyApp(ui, server)
+```
 
 # Block Group Enrichment, Joins, and Aggregation 
 
