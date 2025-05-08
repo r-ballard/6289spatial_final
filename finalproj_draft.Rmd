@@ -17,13 +17,12 @@ set.seed(20052)
 
 #install.packages("rfema", repos = "https://ropensci.r-universe.dev")
 
-pkg_vector <- c("AOI","INLA","NFHL","broom","dplyr","exactextractr","ggbreak",
-                "ggplot2","htmltools","htmlwidgets","httr","leaflet",
-                "leaflet.extras","lmtest","purrr","raster","readr","reader",
-                "rfema","rvest","sf","spData","spdep","spatialreg","sphet",
+pkg_vector <- c("AOI","INLA","NFHL","broom", "caret", "dplyr","exactextractr","ggbreak",
+                "gganimate", "ggpmisc", "ggplot2", "gridExtra", "htmltools","htmlwidgets","httr","leaflet",
+                "leaflet.extras","lmtest", "plotly", "purrr","raster","readr","reader",
+                "rfema","rvest", "scales", "sf","spData","spdep","spatialreg","sphet",
                 "stringr","terra","tigris","tidycensus","tidyr","tmap","xml2",
                 'plotly', 'gganimate')
-
 
 # Install missing packages
 missing_packages <- setdiff(pkg_vector, rownames(installed.packages()))
@@ -32,6 +31,7 @@ if (length(missing_packages)) install.packages(missing_packages)
 # Load all packages
 invisible(lapply(pkg_vector, function(pkg) suppressPackageStartupMessages(library(pkg, character.only = TRUE))))
 
+sf_use_s2(FALSE)
 
 #User needs to set their own data_dir if working directory not repo base
 data_dir <- paste0(getwd(),'/data')
@@ -143,12 +143,6 @@ walk(full_urls, download_nfhl_zip)
 The above codeblock scrapes FEMA's NFHL DFIRM6 catalog. Only needs to be run if shapefile zips are not currently in user data directory.
 
 ```{r create_geoidpivot, eval=FALSE}
-
-library(sf)
-library(dplyr)
-library(stringr)
-library(tidyr)
-library(purrr)
 
 # Directory containing your zip files
 zip_dir <- paste0(data_dir,'/nfhl_zips')
@@ -472,8 +466,6 @@ Here also we tabulate `TOTAL_DAMAGE` as `DAMAGE_PROPERTY_CLEAN` + `DAMAGE_CROPS_
   - ZIP Code Tabulation Areas (ZCTAs)
   
 ```{r constructlinktable}
-library(tigris)
-library(dplyr)
 
 # Get all U.S. counties (this pulls GEOID, NAME, STATEFP, COUNTYFP)
 county_sf <- counties(cb = TRUE, year = 2023)
@@ -553,8 +545,6 @@ outputs_wide <- outputs2 %>%
 Here duplicative DFIRM values are consolidated for join. This is an artifact of independent cities within counties having distinct or recoded DFIRM6 values that do not fully align with their FIPS5.
 
 ```{r join_nfhlouttonoaaevent}
-
-library(dplyr)
 
 events_flood_df <- storm_details_df %>%
   left_join(outputs_wide, by = c("FIPS5" = "GEOID"))
@@ -715,7 +705,6 @@ dmg_tot <- ggplot(decade_damage_t, aes(x = DECADE, y = log(TOTAL_DAMAGE + 1))) +
     text = element_text(size = 12)
   )
 
-library(gridExtra)
 grid.arrange(dmg_fips, dmg_tot, ncol = 2, widths = c(1, 1))
 
 zero_damage_count <- decade_damage_f %>%
@@ -796,31 +785,11 @@ grid.arrange(caus_fips, caus_tot, ncol = 2, widths = c(1, 1))
 
 In the above FIPS5 and DMV Decade Total casualty time series aggregations we can see that individual counties generally do not experience casualties during flood events, with a handful experiencing 0-5 total throughout the decade, and that so far the 2020s appear to be experiencing lower casualty totals during flood events when compared to previous decades.
 
-######################################################################
-######################################################################
-######################################################################
-###################### Andy Paladino's Section #######################
-######################################################################
-######################################################################
-######################################################################
-
 # Block Group Enrichment, Joins, and Aggregation 
 
 ```{r}
 
 # all dependencies used
-
-library(sf)
-library(plotly)
-sf_use_s2(FALSE)
-library(dplyr)
-library(stringr)
-library(ggplot2)
-library(gganimate)
-library(sf)
-library(readr)
-library(tidyr)
-
 
 dc <- read_csv("data/block_groups_dc.csv")
 va <- read_csv("data/block_groups_va.csv")
@@ -945,8 +914,6 @@ census_stormdata <- census_stormdata %>%
 ###########. solely flooding events #####
 #########################################
 
-library(stringr)
-
 # Define regex pattern
 flood_keywords <- "flood|flash flood|flooding"
 
@@ -1014,12 +981,6 @@ state_group_flood <- flood_events %>%
 
 ```{r}
 
-library(dplyr)
-library(readr)
-library(sf)
-library(stringr)
-
-
 dc_counties <- read_csv('data/dc_counties.csv') %>%
   mutate(attributes.FUNCSTAT = as.character(attributes.FUNCSTAT))
 va_counties <- read_csv('data/virginia_counties.csv') %>%
@@ -1058,9 +1019,6 @@ flood_events_county_group <- flood_events_county %>%
 # Event Counts Per County 
 
 ```{r}
-library(ggplot2)
-library(sf)
-library(dplyr)
 
 # Create the map
 flood_map <- ggplot(flood_events_county_group) +
@@ -1233,18 +1191,6 @@ ggplot(sum_bg_group_flood) +
 # Creating plot to include in the animation in the below cell, both are which we did not use in the final report
 
 ```{r}
-#install.packages("gganimate")
-#install.packages("transformr")  # needed for transitions
-#install.packages("gifski")
-#install.packages("png")
-#install.packages("av")
-#install.packages("ggspatial")
-#install.packages("rosm")
-
-library(ggplot2)
-library(gganimate)
-library(sf)
-
 
 all_events_ani <- ggplot(bg_group) +
   geom_sf(data = bg_total_geo, fill = NA, color = "white", size = 0.2) +  # <- outline layer
@@ -1424,7 +1370,6 @@ total_events_state
 # Creating Summary Table of Flood Events per census level over time 
 
 ```{r}
-library(dplyr)
 
 # Block group level (STATE, COUNTY, TRACT, BLOCK GROUP)
 flood_events_blocks <- flood_events %>%
@@ -1462,10 +1407,6 @@ flood_events_states
 
 
 ```{r}
-library(sf)
-library(dplyr)
-library(readr)
-library(tidyr)
 
 # 
 # # Python logic prior to import
@@ -1520,14 +1461,6 @@ final_summary_path = 'data/final_table_summary.csv'
 flood_hazard <- read_csv(fh_path)
 final_summary = read_csv(final_summary_path)
 
-library(readr)
-library(dplyr)
-library(ggplot2)
-library(scales)
-library(caret)   # for preProcess
-library(ggpmisc) # for OLS trendline with equation
-
-
 dc_attr <- read_csv("data/dc_attribution.csv")
 md_attr <- read_csv("data/md_attribution.csv")
 va_attr <- read_csv("data/va_attribution.csv")
@@ -1539,7 +1472,7 @@ attributions_final_merge <- final_summary %>%
 
 # Normalize total_flood_events and total_flood_zone_area
 norm_vars <- attributions_final_merge %>%
-  select(total_flood_events, total_flood_zone_area)
+  dplyr::select(total_flood_events, total_flood_zone_area)
 
 preproc <- preProcess(norm_vars, method = c("range"))  # Min-Max Scaling
 norm_scores <- predict(preproc, norm_vars)
